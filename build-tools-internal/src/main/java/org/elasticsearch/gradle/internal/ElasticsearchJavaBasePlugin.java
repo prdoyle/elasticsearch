@@ -21,6 +21,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ResolutionStrategy;
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.plugins.JavaBasePlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
@@ -35,11 +36,17 @@ import org.gradle.api.tasks.testing.Test;
 import org.gradle.jvm.toolchain.JavaLanguageVersion;
 import org.gradle.jvm.toolchain.JavaToolchainService;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import javax.inject.Inject;
+
+import static java.util.stream.Collectors.joining;
 
 /**
  * A wrapper around Gradle's Java Base plugin that applies our
@@ -182,16 +189,23 @@ public class ElasticsearchJavaBasePlugin implements Plugin<Project> {
             deps.add(project.getDependencies().project(Map.of("path", nativeProject, "configuration", "default")));
         });
         // This input to the following lambda needs to be serializable. Configuration is not serializable, but FileCollection is.
-        FileCollection nativeConfigFiles = nativeConfig;
+        // pd - wat?
+
+        // Prepend test library paths
+        String testLibraryPath = StreamSupport.stream(nativeConfig.spliterator(), false)
+            .map(File::toPath)
+            .map(TestUtil::getTestLibraryPath)
+            .map(Path::toString)
+            .collect(joining(File.pathSeparator))
+            + File.pathSeparator
+            + System.getProperty("java.library.path");
 
         project.getTasks().withType(Test.class).configureEach(test -> {
+            test.dependsOn(nativeConfig);
             var systemProperties = test.getExtensions().getByType(SystemPropertyCommandLineArgumentProvider.class);
-            var libraryPath = (Supplier<String>) () -> TestUtil.getTestLibraryPath(nativeConfigFiles.getAsPath());
-
-            test.dependsOn(nativeConfigFiles);
             // we may use JNA or the JDK's foreign function api to load libraries, so we set both sysprops
-            systemProperties.systemProperty("java.library.path", libraryPath);
-            systemProperties.systemProperty("jna.library.path", libraryPath);
+            systemProperties.systemProperty("java.library.path", ()->testLibraryPath);
+            systemProperties.systemProperty("jna.library.path", ()->testLibraryPath);
         });
     }
 
