@@ -1,6 +1,7 @@
 package org.elasticsearch.nalbind.injector.impl;
 
 import org.elasticsearch.nalbind.injector.ProxyFactory.ProxyInfo;
+import org.elasticsearch.nalbind.injector.ProxyFactoryImpl;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
 
@@ -9,7 +10,7 @@ public class ProxyTests extends ESTestCase {
 
     @Before
     public void createProxy() {
-        proxy = new ProxyFactoryImpl().generateFor(TestInterface.class);
+        proxy = new ProxyFactoryImpl(new ProxyBytecodeGeneratorImpl()).generateFor(TestInterface.class);
     }
 
 	public void testUseAfterSetWorks() {

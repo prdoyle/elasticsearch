@@ -8,5 +8,19 @@
 
 package org.elasticsearch.nalbind.injector;
 
+import java.lang.invoke.MutableCallSite;
+
+/**
+ * A lower-level interface than {@link ProxyFactory}. This one encapsulates only the logic
+ * that requires the asm library and must therefore live in the <code>impl</code> module.
+ */
 public interface ProxyBytecodeGenerator {
+    <T> ProxyBytecodeInfo generateBytecodeFor(Class<T> interfaceType);
+
+    record ProxyBytecodeInfo(
+        String classInternalName,
+        byte[] bytecodes,
+        MutableCallSite callSite
+    ) { }
+
 }

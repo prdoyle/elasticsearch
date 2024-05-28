@@ -1,5 +1,5 @@
-import org.elasticsearch.nalbind.injector.ProxyFactory;
-import org.elasticsearch.nalbind.injector.impl.ProxyFactoryImpl;
+import org.elasticsearch.nalbind.injector.ProxyBytecodeGenerator;
+import org.elasticsearch.nalbind.injector.impl.ProxyBytecodeGeneratorImpl;
 
 module org.elasticsearch.nalbind.impl {
     requires org.elasticsearch.nalbind;
@@ -7,5 +7,5 @@ module org.elasticsearch.nalbind.impl {
     requires org.objectweb.asm;
     requires java.desktop;
 
-    provides ProxyFactory with ProxyFactoryImpl;
+    provides ProxyBytecodeGenerator with ProxyBytecodeGeneratorImpl;
 }

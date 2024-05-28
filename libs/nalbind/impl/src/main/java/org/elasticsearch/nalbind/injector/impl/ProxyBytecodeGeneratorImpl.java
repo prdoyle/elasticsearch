@@ -1,6 +1,7 @@
 package org.elasticsearch.nalbind.injector.impl;
 
 import org.elasticsearch.nalbind.injector.ProxyBytecodeGenerator;
+import org.elasticsearch.nalbind.injector.ProxyFactoryImpl;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.MethodVisitor;
@@ -17,6 +18,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.lang.invoke.MethodHandles.lookup;
+import static java.lang.invoke.MethodType.methodType;
 import static java.lang.reflect.Modifier.isStatic;
 import static java.util.Objects.requireNonNull;
 import static org.objectweb.asm.ClassWriter.COMPUTE_FRAMES;
@@ -50,7 +53,12 @@ public class ProxyBytecodeGeneratorImpl implements ProxyBytecodeGenerator {
 
     public ProxyBytecodeGeneratorImpl(){}
 
-    public static <T> ProxyBytecodeInfo generateBytecodeFor(Class<T> interfaceType, String methodName) {
+    public <T> ProxyBytecodeInfo generateBytecodeFor(Class<T> interfaceType) {
+        int callSiteNum = numCallSites.incrementAndGet();
+        String methodName = "callSite_" + callSiteNum;
+        MutableCallSite callSite = newCallSite(MethodType.methodType(interfaceType));
+        callSites.put(methodName, callSite);
+
         String classInternalName = PACKAGE_INTERNAL_NAME + "/NALBIND_PROXY_" + methodName;
         ClassWriter cw = new ClassWriter(COMPUTE_MAXS | COMPUTE_FRAMES);
         cw.visit(
@@ -67,13 +75,8 @@ public class ProxyBytecodeGeneratorImpl implements ProxyBytecodeGenerator {
 
         cw.visitEnd();
         byte[] bytecodes = cw.toByteArray();
-        return new ProxyBytecodeInfo(classInternalName, bytecodes);
+        return new ProxyBytecodeInfo(classInternalName, bytecodes, callSite);
     }
-
-    public record ProxyBytecodeInfo(
-        String classInternalName,
-        byte[] bytecodes
-    ) { }
 
     private static <T> void generateDelegatingMethods(
         Class<T> interfaceType,
@@ -162,10 +165,28 @@ public class ProxyBytecodeGeneratorImpl implements ProxyBytecodeGenerator {
 		mv.visitEnd();
 	}
 
-	@SuppressWarnings("unused")
+    private static MutableCallSite newCallSite(MethodType type) {
+        try {
+            return new MutableCallSite(lookup()
+                .findStatic(ProxyBytecodeGeneratorImpl.class, "notYetSet", methodType(void.class))
+                .asType(type));
+        } catch (NoSuchMethodException | IllegalAccessException e) {
+            throw new AssertionError("Method should be accessible", e);
+        }
+    }
+
+    public static void notYetSet() {
+        throw new IllegalStateException(
+            "Cannot invoke method on object that is not fully constructed. " +
+                "Use the @Now annotation on your method's parameter to indicate that you need to call a method on it");
+    }
+
+    @SuppressWarnings("unused")
 	public static CallSite bootstrap(MethodHandles.Lookup caller, String name, MethodType type) {
 		return requireNonNull(callSites.remove(name), ()->"CallSite not found: \"" + name + "\"");
 	}
 
     //private static final Logger LOGGER = LogManager.getLogger(ProxyFactoryImpl.class);
+
+
 }

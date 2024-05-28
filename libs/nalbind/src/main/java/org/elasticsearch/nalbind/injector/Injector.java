@@ -1,11 +1,11 @@
 package org.elasticsearch.nalbind.injector;
 
 import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.nalbind.api.Inject;
 import org.elasticsearch.nalbind.api.InjectableSingleton;
 import org.elasticsearch.nalbind.api.Injected;
 import org.elasticsearch.nalbind.api.Now;
-import org.elasticsearch.logging.Logger;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -27,7 +27,7 @@ import java.util.stream.Stream;
 import static java.util.Arrays.asList;
 import static java.util.Collections.newSetFromMap;
 import static java.util.stream.Collectors.joining;
-import static org.elasticsearch.nalbind.injector.ProxyFactoryHolder.PROXY_FACTORY;
+import static org.elasticsearch.nalbind.injector.ProxyBytecodeGeneratorHolder.PROXY_BYTECODE_GENERATOR;
 
 public class Injector {
 	private final Map<Class<?>, Object> instances = new HashMap<>();
@@ -63,13 +63,14 @@ public class Injector {
 
 
 	private void createProxies(Collection<UnambiguousSpec> plan) {
+        var proxyFactory = new ProxyFactoryImpl(PROXY_BYTECODE_GENERATOR);
 		for (var spec: plan) {
 			// Proxies are for interfaces, and interfaces can't be instantiated;
 			// therefore, proxies are only needed for AliasSpec.
 			if (spec instanceof AliasSpec a) {
                 var requestedType = a.requestedType();
 				LOGGER.debug("Creating proxy for {}", requestedType.getSimpleName());
-				var proxyInfo = PROXY_FACTORY.generateFor(requestedType);
+				var proxyInfo = proxyFactory.generateFor(requestedType);
 				proxies.add(proxyInfo);
 				instances.put(requestedType, proxyInfo.proxyObject());
 			}
