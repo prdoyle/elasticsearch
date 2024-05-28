@@ -1,0 +1,1 @@
+https://gitlab.ow2.org/asm/asm/-/blob/master/LICENSE.txt
