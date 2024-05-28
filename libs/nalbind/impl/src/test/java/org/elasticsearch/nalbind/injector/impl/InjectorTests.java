@@ -1,27 +1,17 @@
 package org.elasticsearch.nalbind.injector.impl;
 
-import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.example.module1.Module1ServiceImpl;
 import org.elasticsearch.example.module2.Module2ServiceImpl;
 import org.elasticsearch.example.module2.api.Module2Service;
 import org.elasticsearch.nalbind.api.InjectableSingleton;
 import org.elasticsearch.nalbind.injector.Injector;
 import org.elasticsearch.test.ESTestCase;
-import org.junit.BeforeClass;
-import org.junit.Test;
 
 import java.io.IOException;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-
 public class InjectorTests extends ESTestCase {
-    @BeforeClass
-    public static void setupLogging() {
-        LogConfigurator.configureESLogging();
-    }
 
-    @Test
 	public void testBasicFunctionality() {
 		Injector injector = Injector.withClasses(List.of(
 			// Lame. Hopefully we can auto-scan these instead of providing them explicitly.
@@ -33,7 +23,7 @@ public class InjectorTests extends ESTestCase {
 			module2Service.statusReport());
 	}
 
-	void testDetectAllSPI() throws IOException {
+	public void testDetectAllSPI() throws IOException {
 		for (var m: Module2Service.class.getModule().getLayer().modules()) {
 			System.out.println("Module: " + m);
 			for (var p: m.getDescriptor().provides()) {

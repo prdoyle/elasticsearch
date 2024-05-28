@@ -9,6 +9,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
+import javax.accessibility.AccessibleContext;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -16,6 +17,9 @@ import java.lang.invoke.MutableCallSite;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
+import java.security.PrivilegedExceptionAction;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -115,7 +119,7 @@ public class ProxyFactoryImpl implements ProxyFactory {
         ClassWriter cw
     ) {
 		if (alreadySeen.add(interfaceType)) {
-			LOGGER.trace("generateDelegatingMethods for {}", interfaceType);
+			//LOGGER.trace("generateDelegatingMethods for {}", interfaceType);
 		} else {
 			return;
 		}
@@ -130,7 +134,7 @@ public class ProxyFactoryImpl implements ProxyFactory {
 	}
 
 	private static <T> void generateDelegatingMethod(Method m, Class<T> targetType, String targetMethodName, ClassWriter cw) {
-		LOGGER.trace("generateDelegatingMethod {}", m);
+		//LOGGER.trace("generateDelegatingMethod {}", m);
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, m.getName(), Type.getMethodDescriptor(m), null, null);
 		mv.visitCode();
@@ -169,17 +173,19 @@ public class ProxyFactoryImpl implements ProxyFactory {
 	}
 
 	private static Constructor<?> loadProxyClass(ClassWriter cw, String classInternalName) {
-		return new CustomClassLoader(ProxyFactoryImpl.class.getClassLoader())
+        return AccessController.doPrivileged((PrivilegedAction<Constructor<?>>) () -> new CustomClassLoader(ProxyFactoryImpl.class.getClassLoader())
 			.loadThemBytes(classInternalName.replace('/', '.'), cw.toByteArray())
-			.getConstructors()[0];
+			.getConstructors()[0]);
 	}
 
 	private static Object instantiate(Constructor<?> ctor) {
-		try {
-			return ctor.newInstance();
-		} catch (InstantiationException | IllegalAccessException | VerifyError | InvocationTargetException e) {
-			throw new AssertionError("Should be able to instantiate the generated class", e);
-		}
+        return AccessController.doPrivileged((PrivilegedAction<Object>) () -> {
+            try {
+                return ctor.newInstance();
+            } catch (InstantiationException | IllegalAccessException | VerifyError | InvocationTargetException e) {
+                throw new AssertionError("Should be able to instantiate the generated class", e);
+            }
+        });
 	}
 
 	private static <T> void generateValueMethod(Class<T> interfaceType, ClassWriter cw, String methodName) {
@@ -257,5 +263,5 @@ public class ProxyFactoryImpl implements ProxyFactory {
 		}
 	}
 
-    private static final Logger LOGGER = LogManager.getLogger(ProxyFactoryImpl.class);
+    //private static final Logger LOGGER = LogManager.getLogger(ProxyFactoryImpl.class);
 }
