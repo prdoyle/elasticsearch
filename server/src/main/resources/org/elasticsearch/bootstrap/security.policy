@@ -62,7 +62,8 @@ grant codeBase "${codebase.elasticsearch-core}" {
   permission java.lang.RuntimePermission "getClassLoader";
 };
 
-grant codeBase "${codebase.elasticsearch-nalbind}" {
+//grant codeBase "${codebase.elasticsearch-nalbind}" {
+grant {
   permission java.lang.RuntimePermission "createClassLoader";
   permission java.lang.RuntimePermission "getClassLoader";
   permission java.lang.RuntimePermission "accessDeclaredMembers";
