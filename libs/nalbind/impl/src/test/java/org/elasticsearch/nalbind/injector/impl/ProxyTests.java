@@ -2,6 +2,7 @@ package org.elasticsearch.nalbind.injector.impl;
 
 import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.nalbind.injector.ProxyFactory.ProxyInfo;
+import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -9,7 +10,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
-public class ProxyTest {
+public class ProxyTests extends ESTestCase {
 	static ProxyInfo<TestInterface> proxy;
 
 	@BeforeClass

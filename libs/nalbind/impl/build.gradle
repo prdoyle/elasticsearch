@@ -15,7 +15,7 @@ base {
 String asmVersion = '9.7'
 
 dependencies {
-  implementation project(':libs:elasticsearch-nalbind')
+  compileOnly project(':libs:elasticsearch-nalbind')
   compileOnly project(':libs:elasticsearch-logging')
   implementation "org.ow2.asm:asm:${asmVersion}"
   testImplementation(project(":test:framework")) {

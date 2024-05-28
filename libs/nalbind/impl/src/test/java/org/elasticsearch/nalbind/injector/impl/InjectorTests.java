@@ -6,6 +6,7 @@ import org.elasticsearch.example.module2.Module2ServiceImpl;
 import org.elasticsearch.example.module2.api.Module2Service;
 import org.elasticsearch.nalbind.api.InjectableSingleton;
 import org.elasticsearch.nalbind.injector.Injector;
+import org.elasticsearch.test.ESTestCase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -14,7 +15,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
-public class InjectorTest {
+public class InjectorTests extends ESTestCase {
     @BeforeClass
     public static void setupLogging() {
         LogConfigurator.configureESLogging();
