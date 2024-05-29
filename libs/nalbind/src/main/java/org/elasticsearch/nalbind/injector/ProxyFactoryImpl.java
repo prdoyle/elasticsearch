@@ -12,12 +12,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static java.lang.invoke.MethodHandles.constant;
 import static java.lang.invoke.MutableCallSite.syncAll;
 
-public class ProxyFactoryImpl implements ProxyFactory {
+class ProxyFactoryImpl implements ProxyFactory {
 //	private static final Map<String, MutableCallSite> callSites = new ConcurrentHashMap<>();
 //	private static final AtomicInteger numCallSites = new AtomicInteger(0);
     private final ProxyBytecodeGenerator bytecode;
 
-    public ProxyFactoryImpl(ProxyBytecodeGenerator bytecode) {
+    ProxyFactoryImpl(ProxyBytecodeGenerator bytecode) {
         this.bytecode = bytecode;
     }
 
