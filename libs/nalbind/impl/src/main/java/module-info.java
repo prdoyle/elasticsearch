@@ -1,4 +1,4 @@
-import org.elasticsearch.nalbind.injector.ProxyBytecodeGenerator;
+import org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator;
 import org.elasticsearch.nalbind.injector.impl.ProxyBytecodeGeneratorImpl;
 
 module org.elasticsearch.nalbind.impl {

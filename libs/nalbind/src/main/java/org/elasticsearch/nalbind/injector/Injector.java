@@ -28,7 +28,7 @@ import java.util.stream.Stream;
 import static java.util.Arrays.asList;
 import static java.util.Collections.newSetFromMap;
 import static java.util.stream.Collectors.joining;
-import static org.elasticsearch.nalbind.injector.ProxyBytecodeGenerator.Holder.PROXY_BYTECODE_GENERATOR;
+import static org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator.Holder.PROXY_BYTECODE_GENERATOR;
 
 public class Injector {
 	private final Map<Class<?>, Object> instances = new HashMap<>();

@@ -1,5 +1,7 @@
 package org.elasticsearch.nalbind.injector;
 
+import org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator;
+
 import java.lang.invoke.MutableCallSite;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;

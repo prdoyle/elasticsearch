@@ -10,7 +10,7 @@ package org.elasticsearch.nalbind.injector;
 
 import java.util.function.Consumer;
 
-public interface ProxyFactory {
+interface ProxyFactory {
     <T> ProxyInfo<T> generateFor(Class<T> interfaceType);
 
     record ProxyInfo<T> (

@@ -1,7 +1,6 @@
 package org.elasticsearch.nalbind.injector.impl;
 
-import org.elasticsearch.nalbind.injector.ProxyBytecodeGenerator;
-import org.elasticsearch.nalbind.injector.ProxyFactoryImpl;
+import org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.MethodVisitor;
