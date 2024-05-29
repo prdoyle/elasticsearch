@@ -6,7 +6,11 @@ import org.elasticsearch.nalbind.api.Inject;
 import org.elasticsearch.nalbind.api.InjectableSingleton;
 import org.elasticsearch.nalbind.api.Injected;
 import org.elasticsearch.nalbind.api.Now;
-import org.elasticsearch.nalbind.injector.spec.*;
+import org.elasticsearch.nalbind.injector.spec.AliasSpec;
+import org.elasticsearch.nalbind.injector.spec.AmbiguousSpec;
+import org.elasticsearch.nalbind.injector.spec.ConstructorSpec;
+import org.elasticsearch.nalbind.injector.spec.InjectionSpec;
+import org.elasticsearch.nalbind.injector.spec.UnambiguousSpec;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -19,75 +23,43 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.newSetFromMap;
+import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
 import static org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator.Holder.PROXY_BYTECODE_GENERATOR;
 
 public class Injector {
-	private final Map<Class<?>, Object> instances = new HashMap<>();
-	private final List<ProxyFactory.ProxyInfo<?>> proxies = new ArrayList<>();
+    private final Collection<Class<?>> classesToProcess;
 
-	private Injector(){}
+    Injector(Collection<Class<?>> classesToProcess) {
+        this.classesToProcess = classesToProcess;
+    }
 
-	public static Injector withInjectableSingletonsProvidedBy(ModuleLayer layer) {
-		return withClasses(injectableSingletonsProvidedBy(layer));
+    public static Injector create() {
+        return new Injector(new LinkedHashSet<>());
+    }
+
+	public Injector addInjectableSingletonsProvidedBy(ModuleLayer layer) {
+		return addClasses(injectableSingletonsProvidedBy(layer));
 	}
 
-	public static Injector withClasses(Collection<Class<?>> classesToProcess) {
-		Injector result = new Injector();
-		result.doInjection(specMap(classesToProcess));
-		return result;
+	public Injector addClasses(Collection<Class<?>> classesToProcess) {
+        this.classesToProcess.addAll(classesToProcess);
+		return this;
 	}
 
-	public <T> T getInstance(Class<T> type) {
-		Object instance = instances.get(type);
-		if (instance == null) {
-			throw new IllegalStateException("No injectable instance of " + type);
-		}
-		return type.cast(instance);
-	}
-
-	private void doInjection(Map<Class<?>, InjectionSpec> specsByClass) {
-		Collection<UnambiguousSpec> plan = instantiationPlan(specsByClass);
-		createProxies(plan);
-		executeInstantiationPlan(plan);
-		resolveProxies();
-		reportInjectedObjects(specsByClass);
-	}
-
-
-	private void createProxies(Collection<UnambiguousSpec> plan) {
-        var proxyFactory = new ProxyFactoryImpl(PROXY_BYTECODE_GENERATOR);
-		for (var spec: plan) {
-			// Proxies are for interfaces, and interfaces can't be instantiated;
-			// therefore, proxies are only needed for AliasSpec.
-			if (spec instanceof AliasSpec a) {
-                var requestedType = a.requestedType();
-				LOGGER.debug("Creating proxy for {}", requestedType.getSimpleName());
-				var proxyInfo = proxyFactory.generateFor(requestedType);
-				proxies.add(proxyInfo);
-				instances.put(requestedType, proxyInfo.proxyObject());
-			}
-		}
-	}
-
-	private void resolveProxies() {
-		for (var proxyInfo: proxies) {
-			resolveProxy(proxyInfo);
-		}
-	}
-
-	private <T> void resolveProxy(ProxyFactory.ProxyInfo<T> proxyInfo) {
-		Class<T> type = proxyInfo.interfaceType();
-		proxyInfo.setter().accept(type.cast(instances.get(type)));
-	}
+    public ObjectGraph inject() {
+        InjectionInProgress i = new InjectionInProgress();
+        i.doInjection(specMap(classesToProcess));
+        return new ObjectGraph(i.instances);
+    }
 
 	private static Map<Class<?>, InjectionSpec> specMap(Collection<Class<?>> classesToProcess) {
 		LOGGER.debug("Root set: {}", classesToProcess);
@@ -290,66 +262,6 @@ public class Injector {
 		}
 	}
 
-	/**
-	 * As each object is created, it replaces its proxy in {@link #instances}.
-	 * TODO: This hides errors. We should have a mode where we inject proxies
-	 * to the greatest extent possible to catch cases where people call methods
-	 * without using the @Now annotation.
-	 */
-	private void executeInstantiationPlan(Collection<UnambiguousSpec> plan) {
-		plan.forEach(spec -> {
-            if (Objects.requireNonNull(spec) instanceof ConstructorSpec c) {
-                LOGGER.debug("Instantiating {}", c.requestedType().getSimpleName());
-                instances.put(c.requestedType(), instantiate(c.constructor()));
-            } else if (spec instanceof AliasSpec a) {
-                var requestedType = a.requestedType();
-                var subtype = a.subtype();
-                LOGGER.debug("Aliasing {} = {}", requestedType.getSimpleName(), subtype.getSimpleName());
-                instances.put(requestedType, getInstance(subtype));
-            } else {
-                // TODO: switch patterns!
-                throw new AssertionError("Unexpected spec type: " + spec.getClass().getSimpleName());
-            }
-		});
-	}
-
-	private Object instantiate(Constructor<?> constructor) {
-		Object[] args = Stream.of(constructor.getParameterTypes())
-			.map(this::getInstance)
-			.toArray();
-		try {
-			return constructor.newInstance(args);
-		} catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-			throw new IllegalStateException("Unable to call constructor: " + constructor, e);
-		}
-	}
-
-	private void reportInjectedObjects(Map<Class<?>, InjectionSpec> specsByClass) {
-		Set<Object> distinctInstances = newSetFromMap(new IdentityHashMap<>());
-		distinctInstances.addAll(instances.values());
-
-		// There must be a more efficient way to do this. This way is quadratic.
-		for (Object obj: distinctInstances) {
-			var spec = specsByClass.get(obj.getClass());
-			if (spec instanceof ConstructorSpec c) {
-				for (Method m: c.reportInjectedMethods()) {
-					Type requiredType = ((ParameterizedType)m.getGenericParameterTypes()[0])
-                        .getActualTypeArguments()[0];
-					Class<?> requiredClass = rawClass(requiredType);
-					var relevantObjects = distinctInstances.stream()
-						.filter(requiredClass::isInstance)
-						.toList();
-					try {
-						m.invoke(obj, relevantObjects);
-					} catch (IllegalAccessException | InvocationTargetException e) {
-						throw new IllegalStateException(
-                            "Can't invoke " + Injected.class.getSimpleName() + " method", e);
-					}
-				}
-			}
-		}
-	}
-
 	private static Class<?> rawClass(Type sourceType) {
 		if (sourceType instanceof ParameterizedType pt) {
 			return (Class<?>)pt.getRawType();
@@ -358,5 +270,111 @@ public class Injector {
 		}
 	}
 
-	private static final Logger LOGGER = LogManager.getLogger(Injector.class);
+    /**
+     * A holder for the mutable injection state while injection is running.
+     * This means we don't need to pass all kinds of mutable arguments all around.
+     */
+    private static class InjectionInProgress {
+        final Map<Class<?>, Object> instances = new HashMap<>();
+        final List<ProxyFactory.ProxyInfo<?>> proxies = new ArrayList<>();
+
+        /**
+         * Main entry point
+         */
+        void doInjection(Map<Class<?>, InjectionSpec> specsByClass) {
+            Collection<UnambiguousSpec> plan = instantiationPlan(specsByClass);
+            createProxies(plan);
+            executeInstantiationPlan(plan);
+            resolveProxies();
+            reportInjectedObjects(specsByClass);
+        }
+
+        void createProxies(Collection<UnambiguousSpec> plan) {
+            var proxyFactory = new ProxyFactoryImpl(PROXY_BYTECODE_GENERATOR);
+            for (var spec: plan) {
+                // Proxies are for interfaces, and interfaces can't be instantiated;
+                // therefore, proxies are only needed for AliasSpec.
+                if (spec instanceof AliasSpec a) {
+                    var requestedType = a.requestedType();
+                    LOGGER.debug("Creating proxy for {}", requestedType.getSimpleName());
+                    var proxyInfo = proxyFactory.generateFor(requestedType);
+                    proxies.add(proxyInfo);
+                    instances.put(requestedType, proxyInfo.proxyObject());
+                }
+            }
+        }
+
+        void resolveProxies() {
+            for (var proxyInfo: proxies) {
+                resolveProxy(proxyInfo);
+            }
+        }
+
+        <T> void resolveProxy(ProxyFactory.ProxyInfo<T> proxyInfo) {
+            Class<T> type = proxyInfo.interfaceType();
+            proxyInfo.setter().accept(type.cast(instances.get(type)));
+        }
+
+        /**
+         * As each object is created, it replaces its proxy in {@link #instances}.
+         * TODO: This hides errors. We should have a mode where we inject proxies
+         * to the greatest extent possible to catch cases where people call methods
+         * without using the @Now annotation.
+         */
+        private void executeInstantiationPlan(Collection<UnambiguousSpec> plan) {
+            plan.forEach(spec -> {
+                if (requireNonNull(spec) instanceof ConstructorSpec c) {
+                    LOGGER.debug("Instantiating {}", c.requestedType().getSimpleName());
+                    instances.put(c.requestedType(), instantiate(c.constructor()));
+                } else if (spec instanceof AliasSpec a) {
+                    var requestedType = a.requestedType();
+                    var subtype = a.subtype();
+                    LOGGER.debug("Aliasing {} = {}", requestedType.getSimpleName(), subtype.getSimpleName());
+                    instances.put(requestedType, requireNonNull(instances.get(subtype)));
+                } else {
+                    // TODO: switch patterns!
+                    throw new AssertionError("Unexpected spec type: " + spec.getClass().getSimpleName());
+                }
+            });
+        }
+
+        private Object instantiate(Constructor<?> constructor) {
+            Object[] args = Stream.of(constructor.getParameterTypes())
+                .map(t -> requireNonNull(instances.get(t)))
+                .toArray();
+            try {
+                return constructor.newInstance(args);
+            } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
+                throw new IllegalStateException("Unable to call constructor: " + constructor, e);
+            }
+        }
+
+        private void reportInjectedObjects(Map<Class<?>, InjectionSpec> specsByClass) {
+            Set<Object> distinctInstances = newSetFromMap(new IdentityHashMap<>());
+            distinctInstances.addAll(instances.values());
+
+            // There must be a more efficient way to do this. This way is quadratic.
+            for (Object obj: distinctInstances) {
+                var spec = specsByClass.get(obj.getClass());
+                if (spec instanceof ConstructorSpec c) {
+                    for (Method m: c.reportInjectedMethods()) {
+                        Type requiredType = ((ParameterizedType)m.getGenericParameterTypes()[0])
+                            .getActualTypeArguments()[0];
+                        Class<?> requiredClass = rawClass(requiredType);
+                        var relevantObjects = distinctInstances.stream()
+                            .filter(requiredClass::isInstance)
+                            .toList();
+                        try {
+                            m.invoke(obj, relevantObjects);
+                        } catch (IllegalAccessException | InvocationTargetException e) {
+                            throw new IllegalStateException(
+                                "Can't invoke " + Injected.class.getSimpleName() + " method", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static final Logger LOGGER = LogManager.getLogger(Injector.class);
 }
