@@ -6,6 +6,7 @@ module org.elasticsearch.nalbind.impl {
     requires org.elasticsearch.logging;
     requires org.objectweb.asm;
     requires java.desktop;
+    requires org.elasticsearch.plugin.scanner;
 
     provides ProxyBytecodeGenerator with ProxyBytecodeGeneratorImpl;
 }
