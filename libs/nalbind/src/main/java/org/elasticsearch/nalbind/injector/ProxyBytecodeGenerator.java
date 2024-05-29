@@ -8,7 +8,10 @@
 
 package org.elasticsearch.nalbind.injector;
 
+import org.elasticsearch.core.internal.provider.ProviderLocator;
+
 import java.lang.invoke.MutableCallSite;
+import java.util.Set;
 
 /**
  * A lower-level interface than {@link ProxyFactory}. This one encapsulates only the logic
@@ -23,4 +26,19 @@ public interface ProxyBytecodeGenerator {
         MutableCallSite callSite
     ) { }
 
+    class Holder {
+
+        private Holder() {}
+
+        private static final String PROVIDER_NAME = "nalbind";
+        private static final String PROVIDER_MODULE_NAME = "org.elasticsearch.nalbindimpl";
+        private static final Set<String> MISSING_MODULES = Set.of("org.ow2.asm");
+
+        static final ProxyBytecodeGenerator PROXY_BYTECODE_GENERATOR = (new ProviderLocator<>(
+            PROVIDER_NAME,
+            ProxyBytecodeGenerator.class,
+            PROVIDER_MODULE_NAME,
+            MISSING_MODULES
+        )).get();
+    }
 }
