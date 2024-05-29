@@ -9,6 +9,8 @@ import org.elasticsearch.nalbind.api.Now;
 import org.elasticsearch.nalbind.injector.spec.AliasSpec;
 import org.elasticsearch.nalbind.injector.spec.AmbiguousSpec;
 import org.elasticsearch.nalbind.injector.spec.ConstructorSpec;
+import org.elasticsearch.nalbind.injector.spec.DistinctInstanceSpec;
+import org.elasticsearch.nalbind.injector.spec.ExistingInstanceSpec;
 import org.elasticsearch.nalbind.injector.spec.InjectionSpec;
 import org.elasticsearch.nalbind.injector.spec.UnambiguousSpec;
 
@@ -20,7 +22,6 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -39,13 +40,15 @@ import static org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator.Hold
 
 public class Injector {
     private final Collection<Class<?>> classesToProcess;
+    private final Map<Class<?>, Object> injectedInstances;
 
-    Injector(Collection<Class<?>> classesToProcess) {
+    Injector(Collection<Class<?>> classesToProcess, Map<Class<?>, Object> injectedInstances) {
         this.classesToProcess = classesToProcess;
+        this.injectedInstances = injectedInstances;
     }
 
     public static Injector create() {
-        return new Injector(new LinkedHashSet<>());
+        return new Injector(new LinkedHashSet<>(), new LinkedHashMap<>());
     }
 
 	public Injector addInjectableSingletonsProvidedBy(ModuleLayer layer) {
@@ -61,17 +64,38 @@ public class Injector {
         return addClasses(CLASS_FINDER.classesOnClasspathWithAnnotation(annotation));
     }
 
+    public <T> Injector addInstance(T object) {
+        @SuppressWarnings("unchecked")
+        Class<? super T> aClass = (Class<? super T>) object.getClass();
+        return addInstance(aClass, object);
+    }
+
+    public <T> Injector addInstance(Class<? super T> type, T object) {
+        Object existing = this.injectedInstances.put(type, object);
+        if (existing != null) {
+            throw new IllegalStateException("There's already an object for " + type);
+        }
+        return this;
+    }
+
     public ObjectGraph inject() {
-        InjectionInProgress i = new InjectionInProgress();
-        i.doInjection(specMap(classesToProcess));
+        InjectionInProgress i = new InjectionInProgress(injectedInstances);
+        i.doInjection(specMap(injectedInstances, classesToProcess));
         return new ObjectGraph(i.instances);
     }
 
-	private static Map<Class<?>, InjectionSpec> specMap(Collection<Class<?>> classesToProcess) {
+    private static Map<Class<?>, InjectionSpec> specMap(
+        Map<Class<?>, Object> injectedInstances,
+        Collection<Class<?>> classesToProcess
+    ) {
 		LOGGER.debug("Root set: {}", classesToProcess);
 
 		Set<Class<?>> checklist = new HashSet<>(classesToProcess);
 		Map<Class<?>, InjectionSpec> specsByClass = new LinkedHashMap<>();
+        injectedInstances.forEach((type, obj) -> {
+            registerSpec(new ExistingInstanceSpec(type, obj, getReportInjectedMethods(obj.getClass())), specsByClass);
+            aliasSuperinterfaces(type, type, specsByClass);
+        });
 		for (var c: classesToProcess) {
 			computeSpec(c, checklist, specsByClass);
 		}
@@ -221,7 +245,11 @@ public class Injector {
 		specsByClass.keySet().forEach((c) ->
 			updateInstantiationPlan(plan, c, specsByClass, allParameterTypes, alreadyPlanned)
 		);
-		LOGGER.trace("Instantiation plan: {}", plan);
+        if (LOGGER.isTraceEnabled()) {
+            LOGGER.trace("Instantiation plan: {}", plan.stream()
+                .map(InjectionSpec::toString)
+				.collect(joining("\n\t", "\n\t", "")));
+        }
 		return plan;
 	}
 
@@ -262,6 +290,9 @@ public class Injector {
                     LOGGER.trace("Plan unused {}", a);
                 }
                 plan.add(a);
+            } else if (spec instanceof ExistingInstanceSpec e) {
+                LOGGER.trace("Plan {}", e);
+                plan.add(e);
             } else if (spec instanceof AmbiguousSpec a) {
                 LOGGER.trace("Skipping {}", a);
             }
@@ -280,9 +311,13 @@ public class Injector {
      * A holder for the mutable injection state while injection is running.
      * This means we don't need to pass all kinds of mutable arguments all around.
      */
-    private static class InjectionInProgress {
-        final Map<Class<?>, Object> instances = new HashMap<>();
+    private class InjectionInProgress {
+        final Map<Class<?>, Object> instances = new LinkedHashMap<>();
         final List<ProxyFactory.ProxyInfo<?>> proxies = new ArrayList<>();
+
+        InjectionInProgress(Map<Class<?>, Object> injectedInstances) {
+            instances.putAll(injectedInstances);
+        }
 
         /**
          * Main entry point
@@ -337,6 +372,9 @@ public class Injector {
                     var subtype = a.subtype();
                     LOGGER.debug("Aliasing {} = {}", requestedType.getSimpleName(), subtype.getSimpleName());
                     instances.put(requestedType, requireNonNull(instances.get(subtype)));
+                } else if (spec instanceof ExistingInstanceSpec e) {
+                    LOGGER.debug("Using user-provided instance for " + e.requestedType().getSimpleName());
+                    assert instances.containsKey(e.requestedType());
                 } else {
                     // TODO: switch patterns!
                     throw new AssertionError("Unexpected spec type: " + spec.getClass().getSimpleName());
@@ -362,8 +400,8 @@ public class Injector {
             // There must be a more efficient way to do this. This way is quadratic.
             for (Object obj: distinctInstances) {
                 var spec = specsByClass.get(obj.getClass());
-                if (spec instanceof ConstructorSpec c) {
-                    for (Method m: c.reportInjectedMethods()) {
+                if (spec instanceof DistinctInstanceSpec d) {
+                    for (Method m: d.reportInjectedMethods()) {
                         Type requiredType = ((ParameterizedType)m.getGenericParameterTypes()[0])
                             .getActualTypeArguments()[0];
                         Class<?> requiredClass = rawClass(requiredType);

@@ -8,6 +8,14 @@
 
 package org.elasticsearch.nalbind.injector.spec;
 
-public sealed interface UnambiguousSpec extends InjectionSpec
-    permits AliasSpec, DistinctInstanceSpec
-{ }
+import java.lang.reflect.Method;
+import java.util.List;
+
+/**
+ * Indicates that this spec describes an injectable object that isn't described
+ * by any other spec besides {@link AliasSpec}.
+ */
+public sealed interface DistinctInstanceSpec extends UnambiguousSpec
+    permits ConstructorSpec, ExistingInstanceSpec {
+    List<Method> reportInjectedMethods();
+}

@@ -8,19 +8,17 @@
 
 package org.elasticsearch.nalbind.injector.spec;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.List;
 
-/**
- * Indicates that a type should be instantiated by calling its constructor.
- */
-public record ConstructorSpec(
-	Constructor<?> constructor,
-	List<Method> reportInjectedMethods
+public record ExistingInstanceSpec(
+    Class<?> requestedType,
+    Object instance,
+    List<Method> reportInjectedMethods
 ) implements DistinctInstanceSpec {
-	@Override
-	public Class<?> requestedType() {
-		return constructor.getDeclaringClass();
-	}
+    @Override
+    public String toString() {
+        // Don't call instance.toString; who knows what that will return
+        return "ExistingInstanceSpec{" + "requestedType=" + requestedType + '}';
+    }
 }
