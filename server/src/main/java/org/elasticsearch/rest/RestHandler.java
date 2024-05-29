@@ -24,6 +24,7 @@ import java.util.Set;
  * Handler for REST requests
  */
 @FunctionalInterface
+@InjectableRestHandler
 public interface RestHandler {
 
     /**

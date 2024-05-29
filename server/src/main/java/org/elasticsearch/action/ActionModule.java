@@ -240,6 +240,9 @@ import org.elasticsearch.index.seqno.RetentionLeaseActions;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.indices.store.TransportNodesListShardStoreMetadata;
+import org.elasticsearch.nalbind.api.Inject;
+import org.elasticsearch.nalbind.api.Injected;
+import org.elasticsearch.nalbind.injector.Injector;
 import org.elasticsearch.persistent.CompletionPersistentTaskAction;
 import org.elasticsearch.persistent.RemovePersistentTaskAction;
 import org.elasticsearch.persistent.StartPersistentTaskAction;
@@ -250,6 +253,7 @@ import org.elasticsearch.plugins.interceptor.RestServerActionPlugin;
 import org.elasticsearch.plugins.internal.RestExtension;
 import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
 import org.elasticsearch.reservedstate.service.ReservedClusterStateService;
+import org.elasticsearch.rest.InjectableRestHandler;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestHeaderDefinition;
@@ -409,6 +413,7 @@ import org.elasticsearch.usage.UsageService;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -809,24 +814,62 @@ public class ActionModule extends AbstractModule {
         return new ActionFilters(Set.copyOf(finalFilters));
     }
 
-    public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
-        List<AbstractCatAction> catActions = new ArrayList<>();
-        Predicate<AbstractCatAction> catActionsFilter = restExtension.getCatActionsFilter();
-        Predicate<RestHandler> restFilter = restExtension.getActionsFilter();
-        Consumer<RestHandler> registerHandler = handler -> {
-            if (restFilter.test(handler)) {
-                if (handler instanceof AbstractCatAction catAction && catActionsFilter.test(catAction)) {
-                    catActions.add(catAction);
+    public class RestHandlerInitializer {
+        private final Supplier<DiscoveryNodes> nodesInCluster;
+        private final Predicate<NodeFeature> clusterSupportsFeature;
+
+        RestHandlerInitializer(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+            this.nodesInCluster = nodesInCluster;
+            this.clusterSupportsFeature = clusterSupportsFeature;
+        }
+
+        @Injected
+        void initRestHandlers(Collection<RestHandler> nonPluginHandlers) {
+            List<AbstractCatAction> catActions = new ArrayList<>();
+            Consumer<RestHandler> action = registerHandler(catActions);
+            nonPluginHandlers.forEach(action);
+            for (ActionPlugin plugin : actionPlugins) {
+                for (RestHandler handler : plugin.getRestHandlers(
+                    settings,
+                    namedWriteableRegistry,
+                    restController,
+                    clusterSettings,
+                    indexScopedSettings,
+                    settingsFilter,
+                    indexNameExpressionResolver,
+                    nodesInCluster,
+                    clusterSupportsFeature
+                )) {
+                    action.accept(handler);
                 }
-                restController.registerHandler(handler);
-            } else {
-                /*
-                 * There's no way this handler can be reached, so we just register a placeholder so that requests for it are routed to
-                 * RestController for proper error messages.
-                 */
-                handler.routes().forEach(route -> restController.registerHandler(route, placeholderRestHandler));
             }
-        };
+
+            action.accept(new RestCatAction(catActions));
+        }
+    }
+
+    public void initRestHandlersAutomatically(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        Injector injector = Injector.create()
+            .addInstance(new RestHandlerInitializer(nodesInCluster, clusterSupportsFeature))
+            .addInstance(Supplier.class, nodesInCluster)           // cheese
+            .addInstance(Predicate.class, clusterSupportsFeature)  // cheese
+            .addInstances(
+                threadPool,
+                settings,
+                settingsFilter,
+                clusterSettings,
+                restController.getSearchUsageHolder())
+            .addAnnotatedClasspathClasses(InjectableRestHandler.class);
+        injector.inject();
+    }
+
+    public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        initRestHandlersManually(nodesInCluster, clusterSupportsFeature);
+    }
+
+    public void initRestHandlersManually(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        List<AbstractCatAction> catActions = new ArrayList<>();
+        Consumer<RestHandler> registerHandler = registerHandler(catActions);
         registerHandler.accept(new RestAddVotingConfigExclusionAction());
         registerHandler.accept(new RestClearVotingConfigExclusionsAction());
         registerHandler.accept(new RestNodesInfoAction(settingsFilter));
@@ -999,6 +1042,15 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestUpdateDesiredNodesAction(clusterSupportsFeature));
         registerHandler.accept(new RestDeleteDesiredNodesAction());
 
+        // Synonyms
+        registerHandler.accept(new RestPutSynonymsAction());
+        registerHandler.accept(new RestGetSynonymsAction());
+        registerHandler.accept(new RestDeleteSynonymsAction());
+        registerHandler.accept(new RestGetSynonymsSetsAction());
+        registerHandler.accept(new RestPutSynonymRuleAction());
+        registerHandler.accept(new RestGetSynonymRuleAction());
+        registerHandler.accept(new RestDeleteSynonymRuleAction());
+
         for (ActionPlugin plugin : actionPlugins) {
             for (RestHandler handler : plugin.getRestHandlers(
                 settings,
@@ -1014,16 +1066,42 @@ public class ActionModule extends AbstractModule {
                 registerHandler.accept(handler);
             }
         }
-        registerHandler.accept(new RestCatAction(catActions));
 
-        // Synonyms
-        registerHandler.accept(new RestPutSynonymsAction());
-        registerHandler.accept(new RestGetSynonymsAction());
-        registerHandler.accept(new RestDeleteSynonymsAction());
-        registerHandler.accept(new RestGetSynonymsSetsAction());
-        registerHandler.accept(new RestPutSynonymRuleAction());
-        registerHandler.accept(new RestGetSynonymRuleAction());
-        registerHandler.accept(new RestDeleteSynonymRuleAction());
+        registerHandler.accept(new RestCatAction(catActions));
+    }
+
+    /**
+     * Returns a {@link Consumer} that does several things for each {@link RestHandler} it's given:
+     *
+     * <ul>
+     *     <li>
+     *         Primarily: if the handler is exposed by {@link RestExtension#getActionsFilter()},
+     *         then it's passed to {@link RestController#registerHandler(RestHandler)};
+     *         otherwise, all the handler's routes are configured to return an error.
+     *     </li>
+     *     <li>
+     *         Secondarily: If it's also an {@link AbstractCatAction} and is permitted by
+     *         {@link RestExtension#getCatActionsFilter()} then it's added to <code>catActions</code>.
+     *     </li>
+     * </ul>
+     */
+    private Consumer<RestHandler> registerHandler(List<AbstractCatAction> catActions) {
+        Predicate<AbstractCatAction> catActionsFilter = restExtension.getCatActionsFilter();
+        Predicate<RestHandler> restFilter = restExtension.getActionsFilter();
+        return handler -> {
+            if (restFilter.test(handler)) {
+                if (handler instanceof AbstractCatAction catAction && catActionsFilter.test(catAction)) {
+                    catActions.add(catAction);
+                }
+                restController.registerHandler(handler);
+            } else {
+                /*
+                 * There's no way this handler can be reached, so we just register a placeholder so that requests for it are routed to
+                 * RestController for proper error messages.
+                 */
+                handler.routes().forEach(route -> restController.registerHandler(route, placeholderRestHandler));
+            }
+        };
     }
 
     @Override

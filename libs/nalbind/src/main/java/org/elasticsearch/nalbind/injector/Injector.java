@@ -70,6 +70,13 @@ public class Injector {
         return addInstance(aClass, object);
     }
 
+    public Injector addInstances(Object... objects) {
+        for (var x: objects) {
+            addInstance(x);
+        }
+        return this;
+    }
+
     public <T> Injector addInstance(Class<? super T> type, T object) {
         Object existing = this.injectedInstances.put(type, object);
         if (existing != null) {
