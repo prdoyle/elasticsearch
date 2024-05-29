@@ -12,6 +12,7 @@ import org.elasticsearch.nalbind.injector.spec.ConstructorSpec;
 import org.elasticsearch.nalbind.injector.spec.InjectionSpec;
 import org.elasticsearch.nalbind.injector.spec.UnambiguousSpec;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -33,6 +34,7 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.newSetFromMap;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
+import static org.elasticsearch.nalbind.injector.spi.ClassFinder.Holder.CLASS_FINDER;
 import static org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator.Holder.PROXY_BYTECODE_GENERATOR;
 
 public class Injector {
@@ -54,6 +56,10 @@ public class Injector {
         this.classesToProcess.addAll(classesToProcess);
 		return this;
 	}
+
+    public Injector addAnnotatedClasspathClasses(Class<? extends Annotation> annotation) {
+        return addClasses(CLASS_FINDER.classesOnClasspathWithAnnotation(annotation));
+    }
 
     public ObjectGraph inject() {
         InjectionInProgress i = new InjectionInProgress();
