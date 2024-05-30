@@ -11,7 +11,6 @@ package org.elasticsearch.nalbind.injector.impl;
 import org.elasticsearch.nalbind.injector.spi.ClassFinder;
 import org.elasticsearch.plugin.scanner.ClassReaders;
 import org.elasticsearch.plugin.scanner.ClassScanner;
-import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Type;
 
 import java.io.IOException;
@@ -19,6 +18,7 @@ import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static java.util.Collections.unmodifiableList;
@@ -26,17 +26,19 @@ import static java.util.Collections.unmodifiableList;
 public class ClassFinderImpl implements ClassFinder {
     @Override
     public Collection<Class<?>> classesOnClasspathWithAnnotation(Class<? extends Annotation> annotation) {
-        var scanner = new ClassScanner(Type.getDescriptor(annotation), (className, map) -> {
-            map.put(className, className);
-            return null;
-        });
+        String annotationDescriptor = Type.getDescriptor(annotation);
+        var scanner = new ClassScanner(Map.of(
+            annotationDescriptor, (className, map) -> {
+                map.put(className, className);
+                return null;
+            }));
         List<Class<?>> result = new ArrayList<>();
         try {
             scanner.visit(ClassReaders.ofClassPath());
 
             // getFoundClasses returns a map whose keys are the classes of interest
             // and the values are the supertype which had the annotation we're looking for.
-            Set<String> foundClassInternalNames = scanner.getFoundClasses().keySet();
+            Set<String> foundClassInternalNames = scanner.getFoundClasses(annotationDescriptor).keySet();
             for (String internalName : foundClassInternalNames) {
                 String className = Type.getObjectType(internalName).getClassName();
                 result.add(Class.forName(className));

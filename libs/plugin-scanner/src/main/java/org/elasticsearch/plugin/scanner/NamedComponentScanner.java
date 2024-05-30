@@ -58,38 +58,39 @@ public class NamedComponentScanner {
 
     // returns a Map<String, Map<String,String> - extensible interface -> map{ namedName -> className }
     public static Map<String, Map<String, String>> scanForNamedClasses(List<ClassReader> classReaders) {
-        ClassScanner extensibleClassScanner = new ClassScanner(Type.getDescriptor(Extensible.class), (classname, map) -> {
-            map.put(classname, classname);
-            return null;
-        });
+        String extensibleAnnotation = Type.getDescriptor(Extensible.class);
+        ClassScanner extensibleClassScanner = new ClassScanner(Map.of(
+            extensibleAnnotation, (className, map) -> {
+                map.put(className, className);
+                return null;
+            }));
         extensibleClassScanner.visit(classReaders);
 
-        ClassScanner namedComponentsScanner = new ClassScanner(
-            Type.getDescriptor(NamedComponent.class),
-            (classname, map) -> new AnnotationVisitor(Opcodes.ASM9) {
+        String namedComponentAnnotation = Type.getDescriptor(NamedComponent.class);
+        ClassScanner namedComponentsScanner = new ClassScanner(Map.of(
+            namedComponentAnnotation, (className, map) -> new AnnotationVisitor(Opcodes.ASM9) {
                 @Override
                 public void visit(String key, Object value) {
                     assert key.equals("value");
                     assert value instanceof String;
-                    map.put(value.toString(), classname);
+                    map.put(value.toString(), className);
                 }
-            }
-        );
+            }));
 
         namedComponentsScanner.visit(classReaders);
 
         Map<String, Map<String, String>> componentInfo = new HashMap<>();
-        for (var e : namedComponentsScanner.getFoundClasses().entrySet()) {
+        for (var e : namedComponentsScanner.getFoundClasses(namedComponentAnnotation).entrySet()) {
             String name = e.getKey();
-            String classnameWithSlashes = e.getValue();
-            String extensibleClassnameWithSlashes = extensibleClassScanner.getFoundClasses().get(classnameWithSlashes);
-            if (extensibleClassnameWithSlashes == null) {
+            String classNameWithSlashes = e.getValue();
+            String extensibleClassNameWithSlashes = extensibleClassScanner.getFoundClasses(extensibleAnnotation).get(classNameWithSlashes);
+            if (extensibleClassNameWithSlashes == null) {
                 throw new RuntimeException(
-                    "Named component " + name + "(" + pathToClassName(classnameWithSlashes) + ") does not extend from an extensible class"
+                    "Named component " + name + "(" + pathToClassName(classNameWithSlashes) + ") does not extend from an extensible class"
                 );
             }
-            var named = componentInfo.computeIfAbsent(pathToClassName(extensibleClassnameWithSlashes), k -> new HashMap<>());
-            named.put(name, pathToClassName(classnameWithSlashes));
+            var named = componentInfo.computeIfAbsent(pathToClassName(extensibleClassNameWithSlashes), k -> new HashMap<>());
+            named.put(name, pathToClassName(classNameWithSlashes));
         }
         return componentInfo;
     }
