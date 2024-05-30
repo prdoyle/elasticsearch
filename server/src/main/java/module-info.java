@@ -323,8 +323,10 @@ module org.elasticsearch.server {
     exports org.elasticsearch.rest.action.admin.indices;
     exports org.elasticsearch.rest.action.cat;
     exports org.elasticsearch.rest.action.document;
+    exports org.elasticsearch.rest.action.info to org.elasticsearch.nalbind;
     exports org.elasticsearch.rest.action.ingest;
     exports org.elasticsearch.rest.action.search;
+    exports org.elasticsearch.rest.action.synonyms to org.elasticsearch.nalbind;
     exports org.elasticsearch.script;
     exports org.elasticsearch.script.field;
     exports org.elasticsearch.script.field.vectors;

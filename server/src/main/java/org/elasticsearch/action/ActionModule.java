@@ -814,6 +814,9 @@ public class ActionModule extends AbstractModule {
         return new ActionFilters(Set.copyOf(finalFilters));
     }
 
+    /**
+     * Lets us use injection to build the RestHandlers
+     */
     public class RestHandlerInitializer {
         private final Supplier<DiscoveryNodes> nodesInCluster;
         private final Predicate<NodeFeature> clusterSupportsFeature;
@@ -824,7 +827,7 @@ public class ActionModule extends AbstractModule {
         }
 
         @Injected
-        void initRestHandlers(Collection<RestHandler> nonPluginHandlers) {
+        public void initRestHandlers(Collection<RestHandler> nonPluginHandlers) {
             List<AbstractCatAction> catActions = new ArrayList<>();
             Consumer<RestHandler> action = registerHandler(catActions);
             nonPluginHandlers.forEach(action);
