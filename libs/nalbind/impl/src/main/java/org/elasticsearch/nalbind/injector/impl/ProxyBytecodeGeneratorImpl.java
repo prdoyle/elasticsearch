@@ -70,36 +70,47 @@ public class ProxyBytecodeGeneratorImpl implements ProxyBytecodeGenerator {
 
         generateConstructor(cw);
         HashSet<Class<?>> interfacesAlreadySeen = new HashSet<>();
-        generateDelegatingMethods(interfaceType, interfacesAlreadySeen, methodName, cw);
+        HashSet<DistinctMethod> distinctMethodsAlreadySeen = new HashSet<>();
+        generateDelegatingMethods(interfaceType, interfacesAlreadySeen, distinctMethodsAlreadySeen, interfaceType, methodName, cw);
 
         cw.visitEnd();
         byte[] bytecodes = cw.toByteArray();
         return new ProxyBytecodeInfo(classInternalName, bytecodes, callSite);
     }
 
+    private record DistinctMethod(String name, String descriptor){}
+
     private static <T> void generateDelegatingMethods(
-        Class<T> interfaceType,
-        HashSet<Class<?>> alreadySeen,
+        Class<?> interfaceType,
+        HashSet<Class<?>> interfacesAlreadySeen,
+        HashSet<DistinctMethod> distinctMethodsAlreadySeen,
+        Class<?> targetType,
         String methodName,
         ClassWriter cw
     ) {
-		if (alreadySeen.add(interfaceType)) {
+		if (interfacesAlreadySeen.add(interfaceType)) {
 			//LOGGER.trace("generateDelegatingMethods for {}", interfaceType);
 		} else {
 			return;
 		}
 
 		for (Class<?> s: interfaceType.getInterfaces()) {
-			generateDelegatingMethods(s, alreadySeen, methodName, cw);
+			generateDelegatingMethods(s, interfacesAlreadySeen, distinctMethodsAlreadySeen, targetType, methodName, cw);
 		}
 
 		for (Method m: interfaceType.getDeclaredMethods()) {
-			generateDelegatingMethod(m, interfaceType, methodName, cw);
+			generateDelegatingMethod(m, distinctMethodsAlreadySeen, targetType, methodName, cw);
 		}
 	}
 
-	private static <T> void generateDelegatingMethod(Method m, Class<T> targetType, String targetMethodName, ClassWriter cw) {
-		//LOGGER.trace("generateDelegatingMethod {}", m);
+	private static <T> void generateDelegatingMethod(Method m, HashSet<DistinctMethod> distinctMethodsAlreadySeen, Class<T> targetType, String targetMethodName, ClassWriter cw) {
+        //LOGGER.trace("generateDelegatingMethod {}", m);
+
+        var distinctMethod = new DistinctMethod(m.getName(), Type.getMethodDescriptor(m));
+        if (distinctMethodsAlreadySeen.add(distinctMethod) == false) {
+            //LOGGER.trace("Already generated: {}", distinctMethod);
+            return;
+        }
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, m.getName(), Type.getMethodDescriptor(m), null, null);
 		mv.visitCode();
