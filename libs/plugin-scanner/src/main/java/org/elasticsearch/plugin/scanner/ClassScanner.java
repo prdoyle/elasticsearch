@@ -26,10 +26,10 @@ public class ClassScanner {
 
     public ClassScanner(String targetAnnotation, BiFunction<String, Map<String, String>, AnnotationVisitor> biConsumer) {
         this.foundClasses = new HashMap<>();
-        this.annotatedHierarchyVisitor = new AnnotatedHierarchyVisitor(
+        this.annotatedHierarchyVisitor = new AnnotatedHierarchyVisitor(Map.of(
             targetAnnotation,
-            classname -> biConsumer.apply(classname, foundClasses)
-        );
+            className -> biConsumer.apply(className, foundClasses)
+        ));
     }
 
     public void visit(List<ClassReader> classReaders) {
