@@ -848,7 +848,11 @@ public class ActionModule extends AbstractModule {
         }
     }
 
-    public void initRestHandlersAutomatically(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+    public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        initRestHandlers_usingExplicitList(nodesInCluster, clusterSupportsFeature);
+    }
+
+    public void initRestHandlers_usingAnnotationScan(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
         Injector injector = Injector.create()
             .addInstance(new RestHandlerInitializer(nodesInCluster, clusterSupportsFeature))
             .addInstance(Supplier.class, nodesInCluster)           // cheese
@@ -863,11 +867,202 @@ public class ActionModule extends AbstractModule {
         injector.inject();
     }
 
-    public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
-        initRestHandlersManually(nodesInCluster, clusterSupportsFeature);
+    public void initRestHandlers_usingExplicitList(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        Injector injector = Injector.create()
+            .addInstance(new RestHandlerInitializer(nodesInCluster, clusterSupportsFeature))
+            .addInstance(Supplier.class, nodesInCluster)           // cheese
+            .addInstance(Predicate.class, clusterSupportsFeature)  // cheese
+            .addInstances(
+                threadPool,
+                settings,
+                settingsFilter,
+                clusterSettings,
+                restController.getSearchUsageHolder())
+            .addClasses(List.of(
+                RestAddVotingConfigExclusionAction.class,
+                RestClearVotingConfigExclusionsAction.class,
+                RestNodesInfoAction.class,
+                RestRemoteClusterInfoAction.class,
+                RestNodesCapabilitiesAction.class,
+                RestNodesStatsAction.class,
+                RestNodesUsageAction.class,
+                RestNodesHotThreadsAction.class,
+                RestClusterAllocationExplainAction.class,
+                RestGetDesiredBalanceAction.class,
+                RestDeleteDesiredBalanceAction.class,
+                RestClusterStatsAction.class,
+                RestClusterStateAction.class,
+                RestClusterHealthAction.class,
+                RestClusterUpdateSettingsAction.class,
+                RestClusterGetSettingsAction.class,
+                RestClusterRerouteAction.class,
+                RestClusterSearchShardsAction.class,
+                RestPendingClusterTasksAction.class,
+                RestPutRepositoryAction.class,
+                RestGetRepositoriesAction.class,
+                RestDeleteRepositoryAction.class,
+                RestVerifyRepositoryAction.class,
+                RestCleanupRepositoryAction.class,
+                RestGetSnapshotsAction.class,
+                RestCreateSnapshotAction.class,
+                RestCloneSnapshotAction.class,
+                RestRestoreSnapshotAction.class,
+                RestDeleteSnapshotAction.class,
+                RestSnapshotsStatusAction.class,
+                RestSnapshottableFeaturesAction.class,
+                RestResetFeatureStateAction.class,
+                RestGetFeatureUpgradeStatusAction.class,
+                RestPostFeatureUpgradeAction.class,
+                RestGetIndicesAction.class,
+                RestIndicesStatsAction.class,
+                RestIndicesSegmentsAction.class,
+                RestIndicesShardStoresAction.class,
+                RestGetAliasesAction.class,
+                RestIndexDeleteAliasesAction.class,
+                RestIndexPutAliasAction.class,
+                RestIndicesAliasesAction.class,
+                RestCreateIndexAction.class,
+                RestResizeHandler.RestShrinkIndexAction.class,
+                RestResizeHandler.RestSplitIndexAction.class,
+                RestResizeHandler.RestCloneIndexAction.class,
+                RestRolloverIndexAction.class,
+                RestDeleteIndexAction.class,
+                RestCloseIndexAction.class,
+                RestOpenIndexAction.class,
+                RestAddIndexBlockAction.class,
+                RestGetHealthAction.class,
+                RestPrevalidateNodeRemovalAction.class,
+
+                RestUpdateSettingsAction.class,
+                RestGetSettingsAction.class,
+
+                RestAnalyzeAction.class,
+                RestReloadAnalyzersAction.class,
+                RestGetIndexTemplateAction.class,
+                RestPutIndexTemplateAction.class,
+                RestDeleteIndexTemplateAction.class,
+                RestPutComponentTemplateAction.class,
+                RestGetComponentTemplateAction.class,
+                RestDeleteComponentTemplateAction.class,
+                RestPutComposableIndexTemplateAction.class,
+                RestGetComposableIndexTemplateAction.class,
+                RestDeleteComposableIndexTemplateAction.class,
+                RestSimulateIndexTemplateAction.class,
+                RestSimulateIngestAction.class,
+                RestSimulateTemplateAction.class,
+
+                RestPutMappingAction.class,
+                RestGetMappingAction.class,
+                RestGetFieldMappingAction.class,
+
+                RestRefreshAction.class,
+                RestFlushAction.class,
+                RestSyncedFlushAction.class,
+                RestForceMergeAction.class,
+                RestClearIndicesCacheAction.class,
+                RestResolveClusterAction.class,
+                RestResolveIndexAction.class,
+
+                RestIndexAction.class,
+                CreateHandler.class,
+                AutoIdHandler.class,
+                RestGetAction.class,
+                RestGetSourceAction.class,
+                RestMultiGetAction.class,
+                RestDeleteAction.class,
+                RestCountAction.class,
+                RestTermVectorsAction.class,
+                RestMultiTermVectorsAction.class,
+                RestBulkAction.class,
+                RestUpdateAction.class,
+
+                RestSearchAction.class,
+                RestSearchScrollAction.class,
+                RestClearScrollAction.class,
+                RestOpenPointInTimeAction.class,
+                RestClosePointInTimeAction.class,
+                RestMultiSearchAction.class,
+                RestKnnSearchAction.class,
+
+                RestValidateQueryAction.class,
+
+                RestExplainAction.class,
+
+                RestRecoveryAction.class,
+
+                RestReloadSecureSettingsAction.class,
+
+                // Scripts API
+                RestGetStoredScriptAction.class,
+                RestPutStoredScriptAction.class,
+                RestDeleteStoredScriptAction.class,
+                RestGetScriptContextAction.class,
+                RestGetScriptLanguageAction.class,
+
+                RestFieldCapabilitiesAction.class,
+
+                // Tasks API
+                RestListTasksAction.class,
+                RestGetTaskAction.class,
+                RestCancelTasksAction.class,
+
+                // Ingest API
+                RestPutPipelineAction.class,
+                RestGetPipelineAction.class,
+                RestDeletePipelineAction.class,
+                RestSimulatePipelineAction.class,
+
+                // Dangling indices API
+                RestListDanglingIndicesAction.class,
+                RestImportDanglingIndexAction.class,
+                RestDeleteDanglingIndexAction.class,
+
+                // CAT API
+                RestAllocationAction.class,
+                RestShardsAction.class,
+                RestMasterAction.class,
+                RestNodesAction.class,
+                RestClusterInfoAction.class,
+                RestTasksAction.class,
+                RestIndicesAction.class,
+                RestSegmentsAction.class,
+                // Fully qualified to prevent interference with rest.action.count.RestCountAction
+                org.elasticsearch.rest.action.cat.RestCountAction.class,
+                RestCatRecoveryAction.class,
+                RestHealthAction.class,
+                org.elasticsearch.rest.action.cat.RestPendingClusterTasksAction.class,
+                RestAliasAction.class,
+                RestThreadPoolAction.class,
+                RestPluginsAction.class,
+                RestFielddataAction.class,
+                RestNodeAttrsAction.class,
+                RestRepositoriesAction.class,
+                RestSnapshotAction.class,
+                RestTemplatesAction.class,
+                RestCatComponentTemplateAction.class,
+                RestAnalyzeIndexDiskUsageAction.class,
+                RestFieldUsageStatsAction.class,
+
+                RestUpgradeActionDeprecated.class,
+
+                // Desired nodes
+                RestGetDesiredNodesAction.class,
+                RestUpdateDesiredNodesAction.class,
+                RestDeleteDesiredNodesAction.class,
+
+                // Synonyms
+                RestPutSynonymsAction.class,
+                RestGetSynonymsAction.class,
+                RestDeleteSynonymsAction.class,
+                RestGetSynonymsSetsAction.class,
+                RestPutSynonymRuleAction.class,
+                RestGetSynonymRuleAction.class,
+                RestDeleteSynonymRuleAction.class
+                ));
+        injector.inject();
     }
 
-    public void initRestHandlersManually(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+    public void initRestHandlers_theOldWay(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
         List<AbstractCatAction> catActions = new ArrayList<>();
         Consumer<RestHandler> registerHandler = registerHandler(catActions);
         registerHandler.accept(new RestAddVotingConfigExclusionAction());

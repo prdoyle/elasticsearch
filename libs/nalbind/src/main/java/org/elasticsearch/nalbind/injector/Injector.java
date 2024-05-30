@@ -378,7 +378,7 @@ public class Injector {
                     var requestedType = a.requestedType();
                     var subtype = a.subtype();
                     LOGGER.debug("Aliasing {} = {}", requestedType.getSimpleName(), subtype.getSimpleName());
-                    instances.put(requestedType, requireNonNull(instances.get(subtype)));
+                    instances.put(requestedType, requireNonNull(instances.get(subtype), "No object for " + subtype));
                 } else if (spec instanceof ExistingInstanceSpec e) {
                     LOGGER.debug("Using user-provided instance for " + e.requestedType().getSimpleName());
                     assert instances.containsKey(e.requestedType());
@@ -391,7 +391,7 @@ public class Injector {
 
         private Object instantiate(Constructor<?> constructor) {
             Object[] args = Stream.of(constructor.getParameterTypes())
-                .map(t -> requireNonNull(instances.get(t)))
+                .map(t -> requireNonNull(instances.get(t), "No object for " + t))
                 .toArray();
             try {
                 return constructor.newInstance(args);
