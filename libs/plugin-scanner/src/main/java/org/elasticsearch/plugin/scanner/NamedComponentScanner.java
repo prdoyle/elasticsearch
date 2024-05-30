@@ -59,15 +59,12 @@ public class NamedComponentScanner {
     // returns a Map<String, Map<String,String> - extensible interface -> map{ namedName -> className }
     public static Map<String, Map<String, String>> scanForNamedClasses(List<ClassReader> classReaders) {
         String extensibleAnnotation = Type.getDescriptor(Extensible.class);
-        ClassScanner extensibleClassScanner = new ClassScanner(Map.of(
+        String namedComponentAnnotation = Type.getDescriptor(NamedComponent.class);
+        ClassScanner scanner = new ClassScanner(Map.of(
             extensibleAnnotation, (className, map) -> {
                 map.put(className, className);
                 return null;
-            }));
-        extensibleClassScanner.visit(classReaders);
-
-        String namedComponentAnnotation = Type.getDescriptor(NamedComponent.class);
-        ClassScanner namedComponentsScanner = new ClassScanner(Map.of(
+            },
             namedComponentAnnotation, (className, map) -> new AnnotationVisitor(Opcodes.ASM9) {
                 @Override
                 public void visit(String key, Object value) {
@@ -75,15 +72,16 @@ public class NamedComponentScanner {
                     assert value instanceof String;
                     map.put(value.toString(), className);
                 }
-            }));
+            }
+        ));
 
-        namedComponentsScanner.visit(classReaders);
+        scanner.visit(classReaders);
 
         Map<String, Map<String, String>> componentInfo = new HashMap<>();
-        for (var e : namedComponentsScanner.getFoundClasses(namedComponentAnnotation).entrySet()) {
+        for (var e : scanner.getFoundClasses(namedComponentAnnotation).entrySet()) {
             String name = e.getKey();
             String classNameWithSlashes = e.getValue();
-            String extensibleClassNameWithSlashes = extensibleClassScanner.getFoundClasses(extensibleAnnotation).get(classNameWithSlashes);
+            String extensibleClassNameWithSlashes = scanner.getFoundClasses(extensibleAnnotation).get(classNameWithSlashes);
             if (extensibleClassNameWithSlashes == null) {
                 throw new RuntimeException(
                     "Named component " + name + "(" + pathToClassName(classNameWithSlashes) + ") does not extend from an extensible class"
