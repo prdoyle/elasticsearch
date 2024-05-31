@@ -30,6 +30,16 @@ import static org.objectweb.asm.Type.getDescriptor;
  */
 public class AutoInjectionScanner {
 
+    public static void main(String[] args) throws IOException {
+        List<ClassReader> classReaders = ClassReaders.ofClassPath(); // TODO: Scan plugins too?
+        Collection<String> classNames = AutoInjectionScanner.scanForAutoInjectableClasses(classReaders);
+        Path outputFile = Path.of(args[0]);
+        Files.createDirectories(outputFile.getParent());
+        try (OutputStream outputStream = Files.newOutputStream(outputFile)) {
+            AutoInjectionScanner.writeTo(outputStream, classNames);
+        }
+    }
+
     public static void writeTo(OutputStream outputStream, Collection<String> classNames) throws IOException {
         try (XContentBuilder builder = XContentFactory.jsonBuilder(outputStream)) {
             builder.startObject();
