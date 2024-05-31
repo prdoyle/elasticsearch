@@ -12,7 +12,6 @@ import org.elasticsearch.nalbind.api.AutoInjectable;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
 import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.Type;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -31,12 +30,11 @@ import static org.objectweb.asm.Type.getDescriptor;
 public class AutoInjectionScanner {
 
     public static void main(String[] args) throws IOException {
-        List<ClassReader> classReaders = ClassReaders.ofClassPath(); // TODO: Scan plugins too?
-        Collection<String> classNames = AutoInjectionScanner.scanForAutoInjectableClasses(classReaders);
+        Collection<String> classNames = scanForAutoInjectableClasses(ClassReaders.ofClassPath()); // TODO: Scan plugins too?
         Path outputFile = Path.of(args[0]);
         Files.createDirectories(outputFile.getParent());
         try (OutputStream outputStream = Files.newOutputStream(outputFile)) {
-            AutoInjectionScanner.writeTo(outputStream, classNames);
+            writeTo(outputStream, classNames);
         }
     }
 

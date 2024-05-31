@@ -240,7 +240,6 @@ import org.elasticsearch.index.seqno.RetentionLeaseActions;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.indices.store.TransportNodesListShardStoreMetadata;
-import org.elasticsearch.nalbind.api.Inject;
 import org.elasticsearch.nalbind.api.Injected;
 import org.elasticsearch.nalbind.injector.Injector;
 import org.elasticsearch.persistent.CompletionPersistentTaskAction;
@@ -253,7 +252,6 @@ import org.elasticsearch.plugins.interceptor.RestServerActionPlugin;
 import org.elasticsearch.plugins.internal.RestExtension;
 import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
 import org.elasticsearch.reservedstate.service.ReservedClusterStateService;
-import org.elasticsearch.rest.InjectableRestHandler;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestHeaderDefinition;
@@ -865,8 +863,9 @@ public class ActionModule extends AbstractModule {
                 settings,
                 settingsFilter,
                 clusterSettings,
-                restController.getSearchUsageHolder())
-            .addAnnotatedClasspathClasses(InjectableRestHandler.class);
+                restController.getSearchUsageHolder());
+//        Collection<Class<?>> scanResults = something;
+//        injector.addClasses(scanResults);
         injector.inject();
     }
 

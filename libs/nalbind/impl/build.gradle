@@ -17,7 +17,6 @@ String asmVersion = '9.7'
 dependencies {
   compileOnly project(':libs:elasticsearch-nalbind')
   compileOnly project(':libs:elasticsearch-logging')
-  implementation project(':libs:elasticsearch-plugin-scanner')
   implementation "org.ow2.asm:asm:${asmVersion}"
   testImplementation(project(":test:framework")) {
     exclude group: 'org.elasticsearch', module: 'elasticsearch-nalbind'
