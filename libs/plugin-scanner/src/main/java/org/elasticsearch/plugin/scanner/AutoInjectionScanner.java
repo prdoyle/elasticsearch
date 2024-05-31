@@ -42,7 +42,7 @@ public class AutoInjectionScanner {
         }
     }
 
-    static Collection<String> scanForAutoInjectableClasses(List<ClassReader> classReaders) {
+    public static Collection<String> scanForAutoInjectableClasses(List<ClassReader> classReaders) {
         String autoInjectable = getDescriptor(AutoInjectable.class);
         ClassScanner scanner = new ClassScanner(Map.of(
             autoInjectable, (classDescriptor, map) -> {
