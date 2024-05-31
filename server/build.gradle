@@ -7,6 +7,7 @@
  */
 
 import org.elasticsearch.gradle.internal.info.BuildParams
+import org.elasticsearch.gradle.AutoInjectionTask
 
 apply plugin: 'elasticsearch.build'
 apply plugin: 'elasticsearch.publish'
@@ -272,3 +273,18 @@ tasks.named("licenseHeaders").configure {
 }
 
 tasks.withType(Checkstyle.class).configureEach { t -> t.getMaxHeapSize().set("2g") }
+
+configurations {
+  scannerConfig {
+    canBeConsumed = false
+  }
+}
+
+dependencies {
+  scannerConfig project(':libs:elasticsearch-plugin-scanner')
+}
+
+tasks.register("generateAutoInjectedResource", AutoInjectionTask).configure { t ->
+  t.setClasspath(configurations.compileClasspath.plus(sourceSets.main.output.classesDirs))
+  t.setScannerClasspath(configurations.scannerConfig)
+}
