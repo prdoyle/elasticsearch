@@ -15,6 +15,7 @@ import org.elasticsearch.core.RestApiVersion;
 import org.elasticsearch.rest.RestRequest.Method;
 import org.elasticsearch.xcontent.XContent;
 
+import org.elasticsearch.nalbind.api.AutoInjectable;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -23,8 +24,8 @@ import java.util.Set;
 /**
  * Handler for REST requests
  */
+@AutoInjectable
 @FunctionalInterface
-@InjectableRestHandler
 public interface RestHandler {
 
     /**

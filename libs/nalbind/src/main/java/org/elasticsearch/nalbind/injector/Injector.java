@@ -312,7 +312,7 @@ public class Injector {
      * A holder for the mutable injection state while injection is running.
      * This means we don't need to pass all kinds of mutable arguments all around.
      */
-    private class InjectionInProgress {
+    private static class InjectionInProgress {
         final Map<Class<?>, Object> instances = new LinkedHashMap<>();
         final List<ProxyFactory.ProxyInfo<?>> proxies = new ArrayList<>();
 
@@ -338,10 +338,14 @@ public class Injector {
                 // therefore, proxies are only needed for AliasSpec.
                 if (spec instanceof AliasSpec a) {
                     var requestedType = a.requestedType();
-                    LOGGER.debug("Creating proxy for {}", requestedType.getSimpleName());
-                    var proxyInfo = proxyFactory.generateFor(requestedType);
-                    proxies.add(proxyInfo);
-                    instances.put(requestedType, proxyInfo.proxyObject());
+                    if (requestedType.isInterface()) {
+                        LOGGER.debug("Creating proxy for {}", requestedType.getSimpleName());
+                        var proxyInfo = proxyFactory.generateFor(requestedType);
+                        proxies.add(proxyInfo);
+                        instances.put(requestedType, proxyInfo.proxyObject());
+                    } else {
+                        LOGGER.trace("Not proxying non-interface type {}", requestedType);
+                    }
                 }
             }
         }
@@ -374,7 +378,7 @@ public class Injector {
                     LOGGER.debug("Aliasing {} = {}", requestedType.getSimpleName(), subtype.getSimpleName());
                     instances.put(requestedType, requireNonNull(instances.get(subtype), "No object for " + subtype));
                 } else if (spec instanceof ExistingInstanceSpec e) {
-                    LOGGER.debug("Using user-provided instance for " + e.requestedType().getSimpleName());
+                    LOGGER.debug("Using provided instance for " + e.requestedType().getSimpleName());
                     assert instances.containsKey(e.requestedType());
                 } else {
                     // TODO: switch patterns!
@@ -394,6 +398,7 @@ public class Injector {
             }
         }
 
+        // TODO: This actually happens after injection, so it doesn't belong in InjectionInProgress
         private void reportInjectedObjects(Map<Class<?>, InjectionSpec> specsByClass) {
             Set<Object> distinctInstances = newSetFromMap(new IdentityHashMap<>());
             distinctInstances.addAll(instances.values());

@@ -252,6 +252,7 @@ import org.elasticsearch.plugins.interceptor.RestServerActionPlugin;
 import org.elasticsearch.plugins.internal.RestExtension;
 import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
 import org.elasticsearch.reservedstate.service.ReservedClusterStateService;
+import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestHeaderDefinition;
@@ -408,7 +409,10 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.telemetry.tracing.Tracer;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.usage.UsageService;
+import org.elasticsearch.xcontent.XContentParserConfiguration;
 
+import java.io.BufferedInputStream;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -424,6 +428,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Collections.unmodifiableMap;
+import static java.util.Objects.requireNonNull;
+import static org.elasticsearch.xcontent.XContentType.JSON;
 
 /**
  * Builds and binds the generic action map, all {@link TransportAction}s, and {@link ActionFilters}.
@@ -845,15 +851,25 @@ public class ActionModule extends AbstractModule {
                 }
             }
 
+            logger.info("Register {} cat actions the old way", catActions.size());
             action.accept(new RestCatAction(catActions));
+        }
+
+        @Injected
+        public void registerCatHandler(Collection<AbstractCatAction> allCatActions) {
+            List<AbstractCatAction> filtered = allCatActions.stream()
+                .filter(restExtension.getCatActionsFilter())
+                .toList();
+            logger.info("Register {} cat actions the new way", filtered.size());
+//            registerHandler(new ArrayList<>()).accept(new RestCatAction(filtered));
         }
     }
 
     public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
-        initRestHandlers_usingExplicitList(nodesInCluster, clusterSupportsFeature);
+        initRestHandlers_usingAutoInjectionScan(nodesInCluster, clusterSupportsFeature);
     }
 
-    public void initRestHandlers_usingAnnotationScan(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+    public void initRestHandlers_usingAutoInjectionScan(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
         Injector injector = Injector.create()
             .addInstance(new RestHandlerInitializer(nodesInCluster, clusterSupportsFeature))
             .addInstance(Supplier.class, nodesInCluster)           // cheese
@@ -864,9 +880,32 @@ public class ActionModule extends AbstractModule {
                 settingsFilter,
                 clusterSettings,
                 restController.getSearchUsageHolder());
-//        Collection<Class<?>> scanResults = something;
-//        injector.addClasses(scanResults);
+        List<?> classNameList;
+        try (
+            var is = getClass().getClassLoader().getResourceAsStream("auto_injectable.json");
+            var json = new BufferedInputStream(requireNonNull(is));
+            var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, json)
+        ) {
+            var map = parser.map();
+            classNameList = (List<?>)map.get("classes");
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        injector.addClasses(classNameList.stream()
+            .map(String.class::cast)
+            .map((Function<String, Class<?>>) ActionModule::classForName)
+            .filter(c -> c != RestCatAction.class) // We handle this one specially
+            .filter(BaseRestHandler.class::isAssignableFrom) // TODO
+            .toList());
         injector.inject();
+    }
+
+    private static Class<?> classForName(String name) {
+        try {
+            return Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     public void initRestHandlers_usingExplicitList(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
