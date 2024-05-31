@@ -11,6 +11,7 @@ module org.elasticsearch.plugin.scanner {
     requires org.objectweb.asm;
     requires org.elasticsearch.plugin;
     requires org.elasticsearch.xcontent;
+    requires org.elasticsearch.nalbind;
 
     exports org.elasticsearch.plugin.scanner;
 }
