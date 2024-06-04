@@ -900,14 +900,6 @@ public class ActionModule extends AbstractModule {
         injector.inject();
     }
 
-    private static Class<?> classForName(String name) {
-        try {
-            return Class.forName(name);
-        } catch (ClassNotFoundException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
     public void initRestHandlers_usingExplicitList(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
         Injector injector = Injector.create()
             .addInstance(new RestHandlerInitializer(nodesInCluster, clusterSupportsFeature))
@@ -1304,6 +1296,14 @@ public class ActionModule extends AbstractModule {
         }
 
         registerHandler.accept(new RestCatAction(catActions));
+    }
+
+    private static Class<?> classForName(String name) {
+        try {
+            return Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /**
