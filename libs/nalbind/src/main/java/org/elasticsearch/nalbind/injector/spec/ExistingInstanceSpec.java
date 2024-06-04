@@ -19,6 +19,6 @@ public record ExistingInstanceSpec(
     @Override
     public String toString() {
         // Don't call instance.toString; who knows what that will return
-        return "ExistingInstanceSpec{" + "requestedType=" + requestedType + '}';
+        return "ExistingInstanceSpec[" + "requestedType=" + requestedType + ']';
     }
 }

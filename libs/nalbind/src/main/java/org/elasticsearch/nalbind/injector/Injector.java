@@ -5,7 +5,7 @@ import org.elasticsearch.logging.Logger;
 import org.elasticsearch.nalbind.api.Inject;
 import org.elasticsearch.nalbind.api.InjectableSingleton;
 import org.elasticsearch.nalbind.api.Injected;
-import org.elasticsearch.nalbind.api.Now;
+import org.elasticsearch.nalbind.api.Actual;
 import org.elasticsearch.nalbind.injector.spec.AliasSpec;
 import org.elasticsearch.nalbind.injector.spec.AmbiguousSpec;
 import org.elasticsearch.nalbind.injector.spec.ConstructorSpec;
@@ -38,11 +38,11 @@ import static org.elasticsearch.nalbind.injector.spi.ProxyBytecodeGenerator.Hold
 
 public class Injector {
     private final Collection<Class<?>> classesToProcess;
-    private final Map<Class<?>, Object> injectedInstances;
+    private final Map<Class<?>, Object> existingInstances;
 
-    Injector(Collection<Class<?>> classesToProcess, Map<Class<?>, Object> injectedInstances) {
+    Injector(Collection<Class<?>> classesToProcess, Map<Class<?>, Object> existingInstances) {
         this.classesToProcess = classesToProcess;
-        this.injectedInstances = injectedInstances;
+        this.existingInstances = existingInstances;
     }
 
     public static Injector create() {
@@ -72,7 +72,7 @@ public class Injector {
     }
 
     public <T> Injector addInstance(Class<? super T> type, T object) {
-        Object existing = this.injectedInstances.put(type, object);
+        Object existing = this.existingInstances.put(type, object);
         if (existing != null) {
             throw new IllegalStateException("There's already an object for " + type);
         }
@@ -80,20 +80,20 @@ public class Injector {
     }
 
     public ObjectGraph inject() {
-        InjectionInProgress i = new InjectionInProgress(injectedInstances);
-        i.doInjection(specMap(injectedInstances, classesToProcess));
+        InjectionInProgress i = new InjectionInProgress(existingInstances);
+        i.doInjection(specMap(existingInstances, classesToProcess));
         return new ObjectGraph(i.instances);
     }
 
     private static Map<Class<?>, InjectionSpec> specMap(
-        Map<Class<?>, Object> injectedInstances,
+        Map<Class<?>, Object> existingInstances,
         Collection<Class<?>> classesToProcess
     ) {
 		LOGGER.debug("Root set: {}", classesToProcess);
 
 		Set<Class<?>> checklist = new HashSet<>(classesToProcess);
 		Map<Class<?>, InjectionSpec> specsByClass = new LinkedHashMap<>();
-        injectedInstances.forEach((type, obj) -> {
+        existingInstances.forEach((type, obj) -> {
             registerSpec(new ExistingInstanceSpec(type, obj, getReportInjectedMethods(obj.getClass())), specsByClass);
             aliasSuperinterfaces(type, type, specsByClass);
         });
@@ -232,7 +232,7 @@ public class Injector {
 	/**
 	 * @return the {@link UnambiguousSpec} objects listed in execution order.
 	 */
-	private static Collection<UnambiguousSpec> instantiationPlan(Map<Class<?>, InjectionSpec> specsByClass) {
+	private static List<UnambiguousSpec> instantiationPlan(Map<Class<?>, InjectionSpec> specsByClass) {
 		// TODO: Cycle detection and reporting. Use SCCs
 		LOGGER.trace("Constructing instantiation plan");
 		Set<Class<?>> allParameterTypes = new HashSet<>();
@@ -262,14 +262,15 @@ public class Injector {
 		Set<InjectionSpec> alreadyPlanned
 	) {
 		InjectionSpec spec = specsByClass.get(requestedClass);
+        if (spec == null) {
+            throw new IllegalStateException("Cannot instantiate " + requestedClass);
+        }
 		if (alreadyPlanned.add(spec)) {
-            if (spec == null) {
-                throw new IllegalStateException("Cannot instantiate " + requestedClass);
-            } else if (spec instanceof ConstructorSpec c) {
+            if (spec instanceof ConstructorSpec c) {
                 if (c.constructor().getParameterCount() != 0) {
                     for (var p : c.constructor().getParameters()) {
-                        if (p.isAnnotationPresent(Now.class)) {
-                            LOGGER.trace("Recursing into @Now parameter {} of {}", p.getName(), c);
+                        if (p.isAnnotationPresent(Actual.class)) {
+                            LOGGER.trace("Recursing into @Actual parameter {} of {}", p.getName(), c);
                             updateInstantiationPlan(plan, p.getType(), specsByClass, allParameterTypes, alreadyPlanned);
                         }
                     }
@@ -313,25 +314,26 @@ public class Injector {
      * This means we don't need to pass all kinds of mutable arguments all around.
      */
     private static class InjectionInProgress {
-        final Map<Class<?>, Object> instances = new LinkedHashMap<>();
-        final List<ProxyFactory.ProxyInfo<?>> proxies = new ArrayList<>();
+        private final Map<Class<?>, Object> instances = new LinkedHashMap<>();
+        private final List<ProxyFactory.ProxyInfo<?>> proxies = new ArrayList<>();
+        private final Map<Class<?>, Object> existingInstances;
 
         InjectionInProgress(Map<Class<?>, Object> injectedInstances) {
-            instances.putAll(injectedInstances);
+            this.existingInstances = injectedInstances;
         }
 
         /**
          * Main entry point
          */
         void doInjection(Map<Class<?>, InjectionSpec> specsByClass) {
-            Collection<UnambiguousSpec> plan = instantiationPlan(specsByClass);
+            List<UnambiguousSpec> plan = instantiationPlan(specsByClass);
             createProxies(plan);
             executeInstantiationPlan(plan);
             resolveProxies();
             reportInjectedObjects(specsByClass);
         }
 
-        void createProxies(Collection<UnambiguousSpec> plan) {
+        void createProxies(List<UnambiguousSpec> plan) {
             var proxyFactory = new ProxyFactoryImpl(PROXY_BYTECODE_GENERATOR);
             for (var spec: plan) {
                 // Proxies are for interfaces, and interfaces can't be instantiated;
@@ -365,9 +367,9 @@ public class Injector {
          * As each object is created, it replaces its proxy in {@link #instances}.
          * TODO: This hides errors. We should have a mode where we inject proxies
          * to the greatest extent possible to catch cases where people call methods
-         * without using the @Now annotation.
+         * without using the {@link Actual} annotation.
          */
-        private void executeInstantiationPlan(Collection<UnambiguousSpec> plan) {
+        private void executeInstantiationPlan(List<UnambiguousSpec> plan) {
             plan.forEach(spec -> {
                 if (requireNonNull(spec) instanceof ConstructorSpec c) {
                     LOGGER.debug("Instantiating {}", c.requestedType().getSimpleName());
@@ -379,7 +381,7 @@ public class Injector {
                     instances.put(requestedType, requireNonNull(instances.get(subtype), "No object for " + subtype));
                 } else if (spec instanceof ExistingInstanceSpec e) {
                     LOGGER.debug("Using provided instance for " + e.requestedType().getSimpleName());
-                    assert instances.containsKey(e.requestedType());
+                    instances.put(e.requestedType(), existingInstances.get(e.requestedType()));
                 } else {
                     // TODO: switch patterns!
                     throw new AssertionError("Unexpected spec type: " + spec.getClass().getSimpleName());
@@ -389,7 +391,7 @@ public class Injector {
 
         private Object instantiate(Constructor<?> constructor) {
             Object[] args = Stream.of(constructor.getParameterTypes())
-                .map(t -> requireNonNull(instances.get(t), "No object for " + t))
+                .map(t -> requireNonNull(instances.get(t), "No object for " + t + " calling " + constructor))
                 .toArray();
             try {
                 return constructor.newInstance(args);

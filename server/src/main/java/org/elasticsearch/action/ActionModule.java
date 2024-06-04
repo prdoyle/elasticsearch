@@ -835,6 +835,7 @@ public class ActionModule extends AbstractModule {
             List<AbstractCatAction> catActions = new ArrayList<>();
             Consumer<RestHandler> action = registerHandler(catActions);
             nonPluginHandlers.forEach(action);
+
             for (ActionPlugin plugin : actionPlugins) {
                 for (RestHandler handler : plugin.getRestHandlers(
                     settings,
