@@ -8,24 +8,28 @@
 
 package org.elasticsearch.nalbind.injector;
 
+import java.util.List;
 import java.util.Map;
+
+import static java.util.Collections.emptyList;
 
 /**
  * The product of dependency injection: a pool of singleton objects all connected to each other.
  */
 public class ObjectGraph {
-    private final Map<Class<?>, ?> instances;
+    private final Map<Class<?>, List<Object>> instances;
 
-    ObjectGraph(Map<Class<?>, ?> instances) {
+    ObjectGraph(Map<Class<?>, List<Object>> instances) {
         this.instances = Map.copyOf(instances);
     }
 
     public <T> T getInstance(Class<T> type) {
-        Object instance = instances.get(type);
-        if (instance == null) {
-            throw new IllegalStateException("No injectable instance of " + type);
+        List<Object> candidates = instances.getOrDefault(type, emptyList());
+        if (candidates.size() == 1) {
+            return type.cast(candidates.get(0));
+        } else {
+            throw new IllegalStateException("No unique injectable instance of " + type);
         }
-        return type.cast(instance);
     }
 
 }

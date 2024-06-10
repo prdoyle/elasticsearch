@@ -33,7 +33,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
-import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 import static java.util.Collections.newSetFromMap;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
@@ -328,9 +328,10 @@ public class Injector {
      * This means we don't need to pass all kinds of mutable arguments all around.
      */
     private static class InjectionInProgress {
-        private final Map<Class<?>, Object> instances = new LinkedHashMap<>();
+        private final Map<Class<?>, List<Object>> instances = new LinkedHashMap<>();
         private final List<ProxyFactory.ProxyInfo<?>> proxies = new ArrayList<>();
         private final Map<Class<?>, Object> existingInstances;
+        private final Map<Class<?>, Object> proxyInstances = new LinkedHashMap<>();
 
         InjectionInProgress(Map<Class<?>, Object> injectedInstances) {
             this.existingInstances = injectedInstances;
@@ -360,7 +361,7 @@ public class Injector {
                         LOGGER.debug("Creating proxy for {}", requestedType.getSimpleName());
                         var proxyInfo = proxyFactory.generateFor(requestedType);
                         proxies.add(proxyInfo);
-                        instances.put(requestedType, proxyInfo.proxyObject());
+                        proxyInstances.put(requestedType, proxyInfo.proxyObject());
                         numProxies.incrementAndGet();
                     } else {
                         LOGGER.trace("Not proxying non-interface type {}", requestedType);
@@ -377,8 +378,37 @@ public class Injector {
         }
 
         <T> void resolveProxy(ProxyFactory.ProxyInfo<T> proxyInfo) {
-            Class<T> type = proxyInfo.interfaceType();
-            proxyInfo.setter().accept(type.cast(instances.get(type)));
+            proxyInfo.setter().accept(theOnlyInstance(proxyInfo.interfaceType()));
+        }
+
+        /**
+         * @return the list element corresponding to instances.get(type).get(0),
+         * assuming that instances.get(type) has exactly one element.
+         * @throws IllegalStateException if instances.get(type) does not have exactly one element
+         */
+        private <T> T theOnlyInstance(Class<T> type) {
+            List<Object> candidates = instances.getOrDefault(type, emptyList());
+            if (candidates.size() == 1) {
+                return type.cast(candidates.get(0));
+            }
+
+            T proxy = type.cast(proxyInstances.get(type));
+            if (proxy != null) {
+                return proxy;
+            }
+
+            throw new IllegalStateException("No unique object of type " + type.getSimpleName() + ": "
+                + candidates.stream().map(x -> x.getClass().getSimpleName()).toList());
+        }
+
+        private void addInstance(Class<?> requestedType, Object instance) {
+            instances.computeIfAbsent(requestedType, __->new ArrayList<>())
+                .add(requestedType.cast(instance));
+        }
+
+        private void addInstances(Class<?> requestedType, Collection<?> c) {
+            instances.computeIfAbsent(requestedType, __->new ArrayList<>())
+                .addAll(c);
         }
 
         /**
@@ -392,16 +422,16 @@ public class Injector {
             plan.forEach(spec -> {
                 if (requireNonNull(spec) instanceof MethodHandleSpec m) {
                     LOGGER.debug("Instantiating {}", m.requestedType().getSimpleName());
-                    instances.put(m.requestedType(), instantiate(m.methodHandle()));
+                    addInstance(m.requestedType(), instantiate(m.methodHandle()));
                     numConstructorCalls.incrementAndGet();
                 } else if (spec instanceof AliasSpec a) {
                     var requestedType = a.requestedType();
                     var subtype = a.subtype();
                     LOGGER.debug("Aliasing {} = {}", requestedType.getSimpleName(), subtype.getSimpleName());
-                    instances.put(requestedType, instances.getOrDefault(subtype, emptyList()));
+                    addInstances(requestedType, instances.getOrDefault(subtype, emptyList()));
                 } else if (spec instanceof ExistingInstanceSpec e) {
                     LOGGER.debug("Using provided instance for " + e.requestedType().getSimpleName());
-                    instances.put(e.requestedType(), existingInstances.get(e.requestedType()));
+                    addInstance(e.requestedType(), existingInstances.get(e.requestedType()));
                 } else {
                     // TODO: switch patterns!
                     throw new AssertionError("Unexpected spec type: " + spec.getClass().getSimpleName());
@@ -410,21 +440,21 @@ public class Injector {
             LOGGER.debug("Created {} objects", numConstructorCalls.get());
         }
 
-        private Object instantiate(Constructor<?> constructor) {
-            Object[] args = Stream.of(constructor.getParameterTypes())
-                .map(t -> requireNonNull(instances.get(t), "No object for " + t + " calling " + constructor))
+        private Object instantiate(MethodHandle methodHandle) {
+            Object[] args = methodHandle.type().parameterList().stream()
+                .map(this::theOnlyInstance)
                 .toArray();
             try {
-                return constructor.newInstance(args);
-            } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-                throw new IllegalStateException("Unable to call constructor: " + constructor, e);
+                return methodHandle.invokeWithArguments(args);
+            } catch (Throwable e) {
+                throw new IllegalStateException("Unable to call methodHandle: " + methodHandle, e);
             }
         }
 
         // TODO: This actually happens after injection, so it doesn't belong in InjectionInProgress
         private void reportInjectedObjects(Map<Class<?>, InjectionSpec> specsByClass) {
             Set<Object> distinctInstances = newSetFromMap(new IdentityHashMap<>());
-            distinctInstances.addAll(instances.values());
+            instances.values().forEach(distinctInstances::addAll);
 
             // There must be a more efficient way to do this. This way is quadratic.
             for (Object obj: distinctInstances) {
