@@ -28,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
@@ -80,8 +81,10 @@ public class Injector {
     }
 
     public ObjectGraph inject() {
+        LOGGER.debug("Starting injection");
         InjectionInProgress i = new InjectionInProgress(existingInstances);
         i.doInjection(specMap(existingInstances, classesToProcess));
+        LOGGER.debug("Done injection");
         return new ObjectGraph(i.instances);
     }
 
@@ -330,10 +333,12 @@ public class Injector {
             createProxies(plan);
             executeInstantiationPlan(plan);
             resolveProxies();
+            LOGGER.debug("Starting @Injected");
             reportInjectedObjects(specsByClass);
         }
 
         void createProxies(List<UnambiguousSpec> plan) {
+            AtomicInteger numProxies = new AtomicInteger(0);
             var proxyFactory = new ProxyFactoryImpl(PROXY_BYTECODE_GENERATOR);
             for (var spec: plan) {
                 // Proxies are for interfaces, and interfaces can't be instantiated;
@@ -350,6 +355,7 @@ public class Injector {
                     }
                 }
             }
+            LOGGER.debug("Created {} proxies", numProxies.get());
         }
 
         void resolveProxies() {
@@ -370,6 +376,7 @@ public class Injector {
          * without using the {@link Actual} annotation.
          */
         private void executeInstantiationPlan(List<UnambiguousSpec> plan) {
+            AtomicInteger numConstructorCalls = new AtomicInteger(0);
             plan.forEach(spec -> {
                 if (requireNonNull(spec) instanceof ConstructorSpec c) {
                     LOGGER.debug("Instantiating {}", c.requestedType().getSimpleName());
@@ -387,6 +394,7 @@ public class Injector {
                     throw new AssertionError("Unexpected spec type: " + spec.getClass().getSimpleName());
                 }
             });
+            LOGGER.debug("Created {} objects", numConstructorCalls.get());
         }
 
         private Object instantiate(Constructor<?> constructor) {

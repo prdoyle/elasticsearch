@@ -852,7 +852,6 @@ public class ActionModule extends AbstractModule {
                 }
             }
 
-            logger.info("Register {} cat actions the old way", catActions.size());
             action.accept(new RestCatAction(catActions));
         }
 
@@ -867,7 +866,9 @@ public class ActionModule extends AbstractModule {
     }
 
     public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        logger.debug("Starting initRestHandlers");
         initRestHandlers_usingAutoInjectionScan(nodesInCluster, clusterSupportsFeature);
+        logger.debug("Done initRestHandlers ");
     }
 
     public void initRestHandlers_usingAutoInjectionScan(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
@@ -881,6 +882,8 @@ public class ActionModule extends AbstractModule {
                 settingsFilter,
                 clusterSettings,
                 restController.getSearchUsageHolder());
+
+        logger.debug("Loading auto_injectable.json");
         List<?> classNameList;
         try (
             var is = getClass().getClassLoader().getResourceAsStream("auto_injectable.json");
@@ -898,6 +901,8 @@ public class ActionModule extends AbstractModule {
             .filter(c -> c != RestCatAction.class) // We handle this one specially
             .filter(BaseRestHandler.class::isAssignableFrom) // TODO
             .toList());
+
+        logger.debug("Calling inject()");
         injector.inject();
     }
 
