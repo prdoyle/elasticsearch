@@ -16,6 +16,6 @@ import java.util.List;
  * by any other spec besides {@link AliasSpec}.
  */
 public sealed interface DistinctInstanceSpec extends UnambiguousSpec
-    permits ConstructorSpec, ExistingInstanceSpec {
+    permits MethodHandleSpec, ExistingInstanceSpec {
     List<Method> reportInjectedMethods();
 }

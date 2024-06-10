@@ -2,18 +2,20 @@ package org.elasticsearch.nalbind.injector;
 
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.nalbind.api.Actual;
 import org.elasticsearch.nalbind.api.Inject;
 import org.elasticsearch.nalbind.api.InjectableSingleton;
 import org.elasticsearch.nalbind.api.Injected;
-import org.elasticsearch.nalbind.api.Actual;
 import org.elasticsearch.nalbind.injector.spec.AliasSpec;
 import org.elasticsearch.nalbind.injector.spec.AmbiguousSpec;
-import org.elasticsearch.nalbind.injector.spec.ConstructorSpec;
 import org.elasticsearch.nalbind.injector.spec.DistinctInstanceSpec;
 import org.elasticsearch.nalbind.injector.spec.ExistingInstanceSpec;
 import org.elasticsearch.nalbind.injector.spec.InjectionSpec;
+import org.elasticsearch.nalbind.injector.spec.MethodHandleSpec;
 import org.elasticsearch.nalbind.injector.spec.UnambiguousSpec;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -142,32 +144,43 @@ public class Injector {
 		}
 
 		if (checklist.remove(c)) {
-			Constructor<?> constructor = getSuitableConstructorIfAny(c);
-			if (constructor == null) {
-				LOGGER.debug("No suitable constructor: {}", c);
-				return;
-			}
+            Constructor<?> constructor = getSuitableConstructorIfAny(c);
+            if (constructor == null) {
+                LOGGER.debug("No suitable constructor: {}", c);
+                return;
+            }
 
-			LOGGER.trace("Recurse into parameters for constructor: {}", constructor);
-			for (var pt: constructor.getParameterTypes()) {
-				computeSpec(pt, checklist, specsByClass);
-			}
+            LOGGER.trace("Recurse into parameters for constructor: {}", constructor);
+            for (var pt : constructor.getParameterTypes()) {
+                computeSpec(pt, checklist, specsByClass);
+            }
 
-			List<Method> reportInjectedMethods = getReportInjectedMethods(c);
-			for (Method m: reportInjectedMethods) {
-				LOGGER.trace("Recurse into parameters for method: {}", m);
-				for (var pt: m.getParameterTypes()) {
-					computeSpec(pt, checklist, specsByClass);
-				}
-			}
+            List<Method> reportInjectedMethods = getReportInjectedMethods(c);
+            for (Method m : reportInjectedMethods) {
+                LOGGER.trace("Recurse into parameters for method: {}", m);
+                for (var pt : m.getParameterTypes()) {
+                    computeSpec(pt, checklist, specsByClass);
+                }
+            }
 
-			registerSpec(new ConstructorSpec(constructor, reportInjectedMethods), specsByClass);
-			aliasSuperinterfaces(c, c, specsByClass);
-			for (Class<?> superclass = c.getSuperclass(); superclass != Object.class; superclass = superclass.getSuperclass()) {
-				registerSpec(new AliasSpec(superclass, c), specsByClass);
-				aliasSuperinterfaces(superclass, c, specsByClass);
-			}
-		}
+            MethodHandle ctorHandle;
+            try {
+                ctorHandle = MethodHandles.lookup().unreflectConstructor(constructor);
+            } catch (IllegalAccessException e) {
+                throw new IllegalArgumentException(e);
+            }
+
+            registerSpec(new MethodHandleSpec(
+                    constructor.getDeclaringClass(),
+                    ctorHandle,
+                    reportInjectedMethods),
+                specsByClass);
+            aliasSuperinterfaces(c, c, specsByClass);
+            for (Class<?> superclass = c.getSuperclass(); superclass != Object.class; superclass = superclass.getSuperclass()) {
+                registerSpec(new AliasSpec(superclass, c), specsByClass);
+                aliasSuperinterfaces(superclass, c, specsByClass);
+            }
+        }
 	}
 
 	private static Constructor<?> getSuitableConstructorIfAny(Class<?> type) {
@@ -240,8 +253,8 @@ public class Injector {
 		LOGGER.trace("Constructing instantiation plan");
 		Set<Class<?>> allParameterTypes = new HashSet<>();
 		specsByClass.values().forEach(spec -> {
-			if (spec instanceof ConstructorSpec c) {
-				allParameterTypes.addAll(asList(c.constructor().getParameterTypes()));
+			if (spec instanceof MethodHandleSpec m) {
+				allParameterTypes.addAll(m.methodHandle().type().parameterList());
 			}
 		});
 		List<UnambiguousSpec> plan = new ArrayList<>();
@@ -269,17 +282,15 @@ public class Injector {
             throw new IllegalStateException("Cannot instantiate " + requestedClass);
         }
 		if (alreadyPlanned.add(spec)) {
-            if (spec instanceof ConstructorSpec c) {
-                if (c.constructor().getParameterCount() != 0) {
-                    for (var p : c.constructor().getParameters()) {
-                        if (p.isAnnotationPresent(Actual.class)) {
-                            LOGGER.trace("Recursing into @Actual parameter {} of {}", p.getName(), c);
-                            updateInstantiationPlan(plan, p.getType(), specsByClass, allParameterTypes, alreadyPlanned);
-                        }
+            if (spec instanceof MethodHandleSpec m) {
+                if (m.methodHandle().type().parameterCount() != 0) {
+                    for (var p : m.methodHandle().type().parameterArray()) {
+                        LOGGER.trace("Recursing into parameter {} of {}", p.getName(), m);
+                        updateInstantiationPlan(plan, p, specsByClass, allParameterTypes, alreadyPlanned);
                     }
                 }
-                LOGGER.trace("Plan {}", c);
-                plan.add(c);
+                LOGGER.trace("Plan {}", m);
+                plan.add(m);
             } else if (spec instanceof AliasSpec a) {
                 LOGGER.trace("Recursing into subtype for {}", a);
                 updateInstantiationPlan(plan, a.subtype(), specsByClass, allParameterTypes, alreadyPlanned);
@@ -378,14 +389,14 @@ public class Injector {
         private void executeInstantiationPlan(List<UnambiguousSpec> plan) {
             AtomicInteger numConstructorCalls = new AtomicInteger(0);
             plan.forEach(spec -> {
-                if (requireNonNull(spec) instanceof ConstructorSpec c) {
-                    LOGGER.debug("Instantiating {}", c.requestedType().getSimpleName());
-                    instances.put(c.requestedType(), instantiate(c.constructor()));
+                if (requireNonNull(spec) instanceof MethodHandleSpec m) {
+                    LOGGER.debug("Instantiating {}", m.requestedType().getSimpleName());
+                    instances.put(m.requestedType(), instantiate(m.methodHandle()));
                 } else if (spec instanceof AliasSpec a) {
                     var requestedType = a.requestedType();
                     var subtype = a.subtype();
                     LOGGER.debug("Aliasing {} = {}", requestedType.getSimpleName(), subtype.getSimpleName());
-                    instances.put(requestedType, requireNonNull(instances.get(subtype), "No object for " + subtype));
+                    instances.put(requestedType, instances.getOrDefault(subtype, emptyList()));
                 } else if (spec instanceof ExistingInstanceSpec e) {
                     LOGGER.debug("Using provided instance for " + e.requestedType().getSimpleName());
                     instances.put(e.requestedType(), existingInstances.get(e.requestedType()));
