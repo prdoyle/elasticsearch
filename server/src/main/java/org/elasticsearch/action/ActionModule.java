@@ -895,12 +895,13 @@ public class ActionModule extends AbstractModule {
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
-        injector.addClasses(classNameList.stream()
+        List<Class<?>> classes = classNameList.stream()
             .map(String.class::cast)
             .map((Function<String, Class<?>>) ActionModule::classForName)
             .filter(c -> c != RestCatAction.class) // We handle this one specially
             .filter(BaseRestHandler.class::isAssignableFrom) // TODO
-            .toList());
+            .toList();
+        injector.addClasses(classes);
 
         logger.debug("Calling inject()");
         injector.inject();

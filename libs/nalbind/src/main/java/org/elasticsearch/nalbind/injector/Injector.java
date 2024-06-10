@@ -361,6 +361,7 @@ public class Injector {
                         var proxyInfo = proxyFactory.generateFor(requestedType);
                         proxies.add(proxyInfo);
                         instances.put(requestedType, proxyInfo.proxyObject());
+                        numProxies.incrementAndGet();
                     } else {
                         LOGGER.trace("Not proxying non-interface type {}", requestedType);
                     }
@@ -392,6 +393,7 @@ public class Injector {
                 if (requireNonNull(spec) instanceof MethodHandleSpec m) {
                     LOGGER.debug("Instantiating {}", m.requestedType().getSimpleName());
                     instances.put(m.requestedType(), instantiate(m.methodHandle()));
+                    numConstructorCalls.incrementAndGet();
                 } else if (spec instanceof AliasSpec a) {
                     var requestedType = a.requestedType();
                     var subtype = a.subtype();
