@@ -82,6 +82,21 @@ public class Injector {
         return this;
     }
 
+    public <T> Injector addRecordComponents(Record record) {
+        for (var c: record.getClass().getRecordComponents()) {
+            addMethodReturnValue(record, c.getAccessor(), c.getType());
+        }
+        return this;
+    }
+
+    private <T> void addMethodReturnValue(Object object, Method accessor, Class<T> type) {
+        try {
+            addInstance(type, type.cast(accessor.invoke(object)));
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     public ObjectGraph inject() {
         LOGGER.debug("Starting injection");
         InjectionInProgress i = new InjectionInProgress(existingInstances);

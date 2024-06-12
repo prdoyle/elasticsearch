@@ -10,6 +10,7 @@ package org.elasticsearch.plugin.scanner;
 
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import java.util.HashMap;
@@ -18,12 +19,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import static java.util.Collections.emptySet;
+
 /**
  * An ASM class visitor that captures the class hierarchy, as well as finds a specific annotation.
  */
 public class AnnotatedHierarchyVisitor extends ClassVisitor {
     private String currentClassName;
     private final Map<String, Function<String, AnnotationVisitor>> annotationVisitorsByAnnotationDescriptor;
+    private final Set<String> methodAnnotations = emptySet();
     private final Map<String, Set<String>> classToSubclasses = new HashMap<>();
     private static final String OBJECT_NAME = Object.class.getCanonicalName().replace('.', '/');
 
@@ -60,11 +64,23 @@ public class AnnotatedHierarchyVisitor extends ClassVisitor {
         }
     }
 
+    @Override
+    public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+        return methodAnnotationVisitor;
+    }
+
+    final MethodVisitor methodAnnotationVisitor = new MethodVisitor(Opcodes.ASM9) {
+        @Override
+        public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+            // Handle method annotations the same as annotations on the class itself
+            return AnnotatedHierarchyVisitor.this.visitAnnotation(descriptor, visible);
+        }
+    };
+
     /**
      * Returns a mapping of class name to subclasses of that class
      */
     public Map<String, Set<String>> getClassHierarchy() {
         return classToSubclasses;
     }
-
 }

@@ -37,6 +37,7 @@ import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.jdk.JarHell;
+import org.elasticsearch.plugin.scanner.AutoInjectionScanner;
 import org.elasticsearch.plugin.scanner.ClassReaders;
 import org.elasticsearch.plugin.scanner.NamedComponentScanner;
 import org.elasticsearch.plugins.Platforms;
@@ -73,6 +74,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -879,6 +881,10 @@ public class InstallPluginAction implements Closeable {
         if (info.isStable() && hasNamedComponentFile(pluginRoot) == false) {
             generateNameComponentFile(pluginRoot);
         }
+        if (hasAutoInjectableFile(pluginRoot) == false) {
+            generateAutoInjectableFile(pluginRoot);
+        }
+
         return info;
     }
 
@@ -893,6 +899,21 @@ public class InstallPluginAction implements Closeable {
 
     private static boolean hasNamedComponentFile(Path pluginRoot) {
         return Files.exists(pluginRoot.resolve(PluginDescriptor.NAMED_COMPONENTS_FILENAME));
+    }
+
+    private static void generateAutoInjectableFile(Path pluginRoot) throws IOException {
+        List<ClassReader> classReaders = ClassReaders.ofDirWithJars(pluginRoot).stream().toList();
+        Collection<String> classNames = AutoInjectionScanner.scanForAutoInjectableClasses(classReaders);
+
+        Path outputFile = pluginRoot.resolve(PluginDescriptor.AUTO_INJECTABLE_FILENAME);
+        Files.createDirectories(outputFile.getParent());
+        try (OutputStream outputStream = Files.newOutputStream(outputFile)) {
+            AutoInjectionScanner.writeTo(outputStream, classNames);
+        }
+    }
+
+    private static boolean hasAutoInjectableFile(Path pluginRoot) {
+        return Files.exists(pluginRoot.resolve(PluginDescriptor.AUTO_INJECTABLE_FILENAME));
     }
 
     private static final String LIB_TOOLS_PLUGIN_CLI_CLASSPATH_JAR;
