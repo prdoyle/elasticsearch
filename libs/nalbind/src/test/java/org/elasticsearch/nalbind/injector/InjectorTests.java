@@ -1,0 +1,167 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
+ */
+
+package org.elasticsearch.nalbind.injector;
+
+import org.elasticsearch.example.module1.Module1ServiceImpl;
+import org.elasticsearch.example.module2.Module2ServiceImpl;
+import org.elasticsearch.example.module2.api.Module2Service;
+import org.elasticsearch.nalbind.api.Actual;
+import org.elasticsearch.nalbind.api.InjectionConfigurationException;
+import org.elasticsearch.nalbind.api.UnresolvedProxyException;
+import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.junit.annotations.TestLogging;
+
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+
+@TestLogging(value="org.elasticsearch.nalbind:TRACE", reason="Debugging")
+public class InjectorTests extends ESTestCase {
+
+    public void testBasicFunctionality() {
+        Module2Service module2Service = Injector.create(MethodHandles.lookup())
+            .addClasses(Module1ServiceImpl.class, Module2ServiceImpl.class)
+            .inject(Module2Service.class);
+        assertEquals("Module1Service: Hello from Module1ServiceImpl to my 1 listeners", module2Service.statusReport());
+    }
+
+    public void testInjectionOfRecords() {
+        Injector injector = Injector.create(MethodHandles.lookup()).addClasses(Service1.class, Component3.class);
+        Component3 component3 = injector.inject(Component3.class);
+        assertNotNull(component3);
+        assertNotNull(component3.service1);
+    }
+
+    public void testInjectionOfLists() {
+        Injector injector = Injector.create(MethodHandles.lookup()).addClasses(GoodService.class, ActualService.class, Component1.class);
+        record InjectedStuff(GoodService goodService, ActualService actualService, Component1 component1) {}
+        InjectedStuff injectedStuff = injector.inject(InjectedStuff.class);
+        assertEquals(List.of(injectedStuff.component1), injectedStuff.goodService.components());
+        assertEquals(List.of(injectedStuff.component1), injectedStuff.actualService.components());
+        assertSame(injectedStuff.component1, injectedStuff.goodService.components().get(0));
+        assertSame(injectedStuff.component1, injectedStuff.actualService.components().get(0));
+    }
+
+    public void testInjectionOfMultipleLists() {
+        Injector injector = Injector.create(MethodHandles.lookup()).addClass(MultiService.class);
+        record InjectedStuff(MultiService multiService, Component1 component1, Component2 component2) {}
+        var injectedStuff = injector.inject(InjectedStuff.class);
+        assertEquals(List.of(injectedStuff.component1), injectedStuff.multiService.component1s);
+        assertEquals(List.of(injectedStuff.component2), injectedStuff.multiService.component2s);
+        assertSame(injectedStuff.component1, injectedStuff.multiService.component1s.get(0));
+        assertSame(injectedStuff.component2, injectedStuff.multiService.component2s.get(0));
+    }
+
+    public void testGoodMutualInjectionViaList() {
+        interface Listener {}
+        record Service(List<Listener> listeners) {}
+        record SomeListener(Service service) implements Listener {}
+
+        record InjectedStuff(Service service, SomeListener listener){}
+
+        InjectedStuff injected = Injector.create(MethodHandles.lookup()).addClass(SomeListener.class).inject(InjectedStuff.class);
+        assertEquals(List.of(injected.listener), injected.service.listeners());
+        assertSame(injected.listener, injected.service.listeners().get(0));
+    }
+
+    // Sad paths
+
+    public void testBadUseOfListProxy() {
+        Injector injector = Injector.create(MethodHandles.lookup()).addClasses(BadService.class, Component1.class);
+        // Note that this throws IllegalStateException rather than InjectionConfigurationException because the problem occurs in user code
+        assertThrows(UnresolvedProxyException.class, () -> injector.inject(Void.class));
+    }
+
+    public void testBadInterfaceClass() {
+        assertThrows(InjectionConfigurationException.class, () ->
+            Injector.create(MethodHandles.lookup()).addClass(Listener.class).inject(Void.class));
+    }
+
+    public void testBadUnknownType() {
+        interface Supertype{}
+        record Service(Supertype supertype) {}
+
+        // Injector knows only about Service, discovers Supertype, but can't find any subtypes
+        Injector injector = Injector.create(MethodHandles.lookup()).addClass(Service.class);
+
+        assertThrows(IllegalStateException.class, () -> injector.inject(Void.class));
+    }
+
+    public void testBadCircularDependency() {
+        assertThrows(InjectionConfigurationException.class, () -> {
+            Injector.create(MethodHandles.lookup()).addClasses(Circular1.class, Circular2.class).inject(Void.class);
+        });
+    }
+
+    /**
+     * For this one, we don't explicitly tell the injector about the classes involved in the cycle;
+     * it finds them on its own.
+     */
+    public void testBadCircularDependencyViaParameter() {
+        record UsesCircular1(Circular1 circular1){}
+        assertThrows(InjectionConfigurationException.class, () -> {
+            Injector.create(MethodHandles.lookup()).addClass(UsesCircular1.class).inject(Void.class);
+        });
+    }
+
+    public void testBadCircularDependencyViaSupertype() {
+        interface Service1 {}
+        record Service2(Service1 service1){}
+        record Service3(Service2 service2) implements Service1 {}
+        assertThrows(InjectionConfigurationException.class, () -> {
+            Injector.create(MethodHandles.lookup()).addClasses(Service2.class, Service3.class).inject(Void.class);
+        });
+    }
+
+    public void testBadCircularDependencyViaList() {
+        interface Listener {}
+        record Service(@Actual List<Listener> listeners) {}
+        record Whoops(Service service) implements Listener {}
+
+        assertThrows(InjectionConfigurationException.class, () -> {
+            Injector.create(MethodHandles.lookup()).addClasses(Whoops.class).inject(Void.class);
+        });
+    }
+
+    public void testBadListenerAfterListIsResolved() {
+
+    }
+
+    // Common injectable things
+
+    public record Service1() { }
+
+    public interface Listener{}
+
+    public record Component1() implements Listener {}
+
+    public record Component2(Component1 component1) {}
+
+    public record Component3(Service1 service1) {}
+
+    public record GoodService(List<Component1> components) { }
+
+    public record BadService(List<Component1> components) {
+        public BadService {
+            // Shouldn't be using the component list here!
+            assert components.isEmpty() == false;
+        }
+    }
+
+    public record ActualService(@Actual List<Component1> components) {
+        public ActualService {
+            assert components.isEmpty() == false;
+        }
+    }
+
+    public record MultiService(List<Component1> component1s, List<Component2> component2s) { }
+
+    record Circular1(Circular2 service2) {}
+    record Circular2(Circular1 service2) {}
+
+}
