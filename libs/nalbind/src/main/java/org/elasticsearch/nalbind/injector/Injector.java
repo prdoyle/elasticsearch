@@ -21,6 +21,7 @@ import org.elasticsearch.nalbind.injector.step.RollUpStep;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -217,7 +218,11 @@ public class Injector {
                 );
                 aliasSuperinterfaces(c, c, specsByClass);
                 for (Class<?> superclass = c.getSuperclass(); superclass != Object.class; superclass = superclass.getSuperclass()) {
-                    registerSpec(new AliasSpec(superclass, c), specsByClass);
+                    if (Modifier.isAbstract(superclass.getModifiers())) {
+                        registerSpec(new AliasSpec(superclass, c), specsByClass);
+                    } else {
+                        LOGGER.trace("Not aliasing {} to concrete superclass {}", c.getSimpleName(), superclass.getSimpleName());
+                    }
                     aliasSuperinterfaces(superclass, c, specsByClass);
                 }
             } else {
@@ -254,7 +259,7 @@ public class Injector {
     /**
      * When creating <code>specsByClass</code>, we compute a kind of "inheritance closure"
      * in the sense that, for each class <code>C</code>, we not only add an entry for <code>C</code>,
-     * but we also add {@link AliasSpec} entries for all supertypes.
+     * but we also add {@link AliasSpec} entries for all abstract supertypes.
      * <p>
      * This method is part of the recursion that achieves this.
      */

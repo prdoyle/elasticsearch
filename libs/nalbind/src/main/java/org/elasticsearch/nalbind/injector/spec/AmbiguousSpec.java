@@ -34,4 +34,12 @@ public record AmbiguousSpec(Class<?> requestedType, InjectionSpec option1, Injec
             return Stream.of((UnambiguousSpec) spec);
         }
     }
+
+    @Override
+    public String toString() {
+        return "AmbiguousSpec{" +
+            "requestedType=" + requestedType +
+            ", options=" + candidates().toList() +
+            '}';
+    }
 }

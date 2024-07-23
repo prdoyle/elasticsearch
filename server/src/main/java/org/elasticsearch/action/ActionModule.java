@@ -416,6 +416,7 @@ import org.elasticsearch.xcontent.XContentParserConfiguration;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -432,6 +433,7 @@ import java.util.stream.Stream;
 
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
+import static java.util.function.Predicate.not;
 import static org.elasticsearch.xcontent.XContentType.JSON;
 
 /**
@@ -832,7 +834,7 @@ public class ActionModule extends AbstractModule {
         private final Predicate<NodeFeature> clusterSupportsFeature;
         private final List<RestHandler> nonPluginHandlers;
 
-        RestHandlerInitializer(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature, List<RestHandler> nonPluginHandlers) {
+        public RestHandlerInitializer(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature, List<RestHandler> nonPluginHandlers) {
             this.nodesInCluster = nodesInCluster;
             this.clusterSupportsFeature = clusterSupportsFeature;
             this.nonPluginHandlers = nonPluginHandlers;
@@ -900,12 +902,36 @@ public class ActionModule extends AbstractModule {
             .map(String.class::cast)
             .map((Function<String, Class<?>>) ActionModule::classForName)
             .filter(c -> c != RestCatAction.class) // We handle this one specially
+            .filter(not(c -> Modifier.isAbstract(c.getModifiers())))
             .filter(BaseRestHandler.class::isAssignableFrom) // TODO
             .toList();
         injector.addClasses(classes);
 
         logger.debug("Calling inject()");
-        injector.inject(RestHandlerInitializer.class).initRestHandlers();
+        record InjectedThings(List<RestHandler> nonPluginHandlers){}
+        List<RestHandler> nonPluginHandlers = injector.inject(InjectedThings.class).nonPluginHandlers();
+
+        List<AbstractCatAction> catActions = new ArrayList<>();
+        Consumer<RestHandler> action = registerHandler(catActions);
+        nonPluginHandlers.forEach(action);
+
+        for (ActionPlugin plugin : actionPlugins) {
+            for (RestHandler handler : plugin.getRestHandlers(
+                settings,
+                namedWriteableRegistry,
+                restController,
+                clusterSettings,
+                indexScopedSettings,
+                settingsFilter,
+                indexNameExpressionResolver,
+                nodesInCluster,
+                clusterSupportsFeature
+            )) {
+                action.accept(handler);
+            }
+        }
+
+        action.accept(new RestCatAction(catActions));
     }
 
     public void initRestHandlers_usingExplicitList(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {

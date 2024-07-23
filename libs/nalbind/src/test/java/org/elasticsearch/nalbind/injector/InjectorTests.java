@@ -69,6 +69,29 @@ public class InjectorTests extends ESTestCase {
         assertSame(injected.listener, injected.service.listeners().get(0));
     }
 
+    /**
+     * In most cases, if there are two objects that are instances of a class, that's ambiguous.
+     * However, if a concrete (non-abstract) superclass is configured directly, that is not ambiguous:
+     * the instance of that superclass takes precedence over any instances of any subclasses.
+     */
+    public void testOverrideAlias() {
+        class Superclass {}
+        class Subclass extends Superclass {}
+
+        assertEquals(Superclass.class, Injector.create(MethodHandles.lookup())
+            .addClasses(Superclass.class, Subclass.class) // Superclass first
+            .inject(Superclass.class)
+            .getClass());
+        assertEquals(Superclass.class, Injector.create(MethodHandles.lookup())
+            .addClasses(Subclass.class, Superclass.class) // Subclass first
+            .inject(Superclass.class)
+            .getClass());
+        assertEquals(Superclass.class, Injector.create(MethodHandles.lookup())
+            .addClasses(Subclass.class)
+            .inject(Superclass.class) // Superclass is not mentioned until here
+            .getClass());
+    }
+
     // Sad paths
 
     public void testBadUseOfListProxy() {
