@@ -39,7 +39,7 @@ public record AmbiguousSpec(Class<?> requestedType, InjectionSpec option1, Injec
     public String toString() {
         return "AmbiguousSpec{" +
             "requestedType=" + requestedType +
-            ", options=" + candidates().toList() +
+            ", some options: " + candidates().limit(4).toList() +
             '}';
     }
 }

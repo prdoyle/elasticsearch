@@ -57,7 +57,16 @@ public class InjectorTests extends ESTestCase {
         assertSame(injectedStuff.component2, injectedStuff.multiService.component2s.get(0));
     }
 
-    public void testGoodMutualInjectionViaList() {
+    public void testSupertypeList() {
+        interface Listener {}
+        record Service(List<Listener> listeners) {}
+        record SomeListener() implements Listener {}
+
+        Service service = Injector.create(MethodHandles.lookup()).addInstance(this).addClass(SomeListener.class).inject(Service.class);
+        assertEquals(1, service.listeners.size());
+    }
+
+    public void testMutualInjectionViaList() {
         interface Listener {}
         record Service(List<Listener> listeners) {}
         record SomeListener(Service service) implements Listener {}
@@ -67,6 +76,7 @@ public class InjectorTests extends ESTestCase {
         InjectedStuff injected = Injector.create(MethodHandles.lookup()).addClass(SomeListener.class).inject(InjectedStuff.class);
         assertEquals(List.of(injected.listener), injected.service.listeners());
         assertSame(injected.listener, injected.service.listeners().get(0));
+        assertSame(injected.service, injected.listener.service);
     }
 
     /**

@@ -72,14 +72,15 @@ class PlanInterpreter {
     }
 
     void resolveAllRemainingProxies() {
-        LOGGER.debug("Resolving {} remaining list proxies", unresolvedListProxies.size());
-        unresolvedListProxies.forEach(this::resolveProxy);
-        unresolvedListProxies.clear();
+//        LOGGER.debug("Resolving {} remaining list proxies", unresolvedListProxies.size());
+//        unresolvedListProxies.forEach(this::resolveProxy);
+//        unresolvedListProxies.clear();
     }
 
     private <T extends List<?>> void resolveProxy(Class<?> c, ProxyFactory.ProxyInfo<T> p) {
-        LOGGER.trace("- Resolve list proxy for {}", c.getSimpleName());
-        p.setter().accept(p.interfaceType().cast(instances.getOrDefault(c, emptyList())));
+        T instances = p.interfaceType().cast(this.instances.getOrDefault(c, emptyList()));
+        LOGGER.debug("- {}: {} instances", c.getSimpleName(), instances.size());
+        p.setter().accept(instances);
     }
 
     /**

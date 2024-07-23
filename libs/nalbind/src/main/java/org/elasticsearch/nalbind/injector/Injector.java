@@ -12,6 +12,7 @@ import org.elasticsearch.nalbind.injector.spec.InjectionModifiers;
 import org.elasticsearch.nalbind.injector.spec.InjectionSpec;
 import org.elasticsearch.nalbind.injector.spec.MethodHandleSpec;
 import org.elasticsearch.nalbind.injector.spec.ParameterSpec;
+import org.elasticsearch.nalbind.injector.spec.UnambiguousSpec;
 import org.elasticsearch.nalbind.injector.step.InjectionStep;
 import org.elasticsearch.nalbind.injector.step.InstantiateStep;
 import org.elasticsearch.nalbind.injector.step.ListProxyCreateStep;
@@ -230,7 +231,7 @@ public class Injector {
             }
         }
         if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("Specs: {}", specsByClass.values().stream().map(Object::toString).collect(joining("\n\t", "\n\t", "")));
+            LOGGER.trace("Specs: {}", specsByClass.values().stream().filter(s -> s instanceof UnambiguousSpec).map(Object::toString).collect(joining("\n\t", "\n\t", "")));
         }
         return specsByClass;
     }
@@ -277,7 +278,7 @@ public class Injector {
             LOGGER.trace("Register spec: {}", spec);
         } else {
             AmbiguousSpec ambiguousSpec = new AmbiguousSpec(requestedType, spec, existing);
-            LOGGER.trace("Ambiguity discovered: {}", ambiguousSpec);
+            LOGGER.trace("Ambiguity discovered for {}", requestedType);
             specsByClass.put(requestedType, ambiguousSpec);
         }
     }
@@ -321,7 +322,7 @@ public class Injector {
             this.requiredTypes = requiredTypes;
             this.plan = new ArrayList<>();
             this.specsByClass = unmodifiableMap(specsByClass);
-            this.queue = new ArrayDeque<>(specsByClass.keySet());
+            this.queue = new ArrayDeque<>(/*specsByClass.keySet()*/ requiredTypes);
             this.allParameterTypes = unmodifiableSet(allParameterTypes);
             this.startedPlanning = new HashSet<>();
             this.finishedPlanning = new HashSet<>();
@@ -344,7 +345,21 @@ public class Injector {
             while ((c = queue.poll()) != null) {
                 updatePlan(c, 0);
             }
+            resolveRemainingProxies();
             return plan;
+        }
+
+        private void resolveRemainingProxies() {
+            Set<Class<?>> proxiesToResolve = new LinkedHashSet<>();
+            for (InjectionStep step : plan) {
+                if (step instanceof ListProxyCreateStep s) {
+                    proxiesToResolve.add(s.elementType());
+                } else if (step instanceof ListProxyResolveStep s) {
+                    proxiesToResolve.remove(s.elementType());
+                }
+            }
+            LOGGER.trace("Resolving {} remaining proxies", proxiesToResolve.size());
+            proxiesToResolve.forEach(elementType -> rollUpAndResolveListProxy(elementType, 0, ""));
         }
 
         /**
@@ -354,31 +369,36 @@ public class Injector {
          * @param depth is used just for indenting the logs
          */
         private void updatePlan(Class<?> requestedClass, int depth) {
+            InjectionSpec spec = specsByClass.get(requestedClass);
+            if (spec == null) {
+                throw new InjectionConfigurationException("Cannot instantiate " + requestedClass);
+            }
+            updatePlan(spec, depth);
+        }
+
+        private void updatePlan(InjectionSpec spec, int depth) {
             String indent;
             if (LOGGER.isTraceEnabled()) {
                 indent = "\t".repeat(depth);
             } else {
                 indent = null;
             }
-            InjectionSpec spec = specsByClass.get(requestedClass);
-            if (spec == null) {
-                throw new InjectionConfigurationException("Cannot instantiate " + requestedClass);
-            }
+
             if (finishedPlanning.contains(spec)) {
-                LOGGER.trace("{}Already planned", indent);
+                LOGGER.trace("{}Already planned {}", indent, spec);
                 return;
             }
 
+            LOGGER.trace("{}Planning for {}", indent, spec);
             if (startedPlanning.add(spec) == false) {
                 throw new InjectionConfigurationException("Cyclic dependency involving " + spec);
             }
 
-            LOGGER.trace("{}Planning for {}", indent, spec);
             if (spec instanceof MethodHandleSpec m) {
                 for (var p : m.parameters()) {
                     if (p.canBeProxied()) {
                         if (alreadyProxied.add(p.injectableType())) {
-                            addStep(indent, new ListProxyCreateStep(p.injectableType()));
+                            addStep(new ListProxyCreateStep(p.injectableType()), indent);
                         } else {
                             LOGGER.trace("{}- Use existing proxy for {}", indent, p);
                         }
@@ -386,13 +406,13 @@ public class Injector {
                         LOGGER.trace("{}- Recursing into {} for actual parameter {}", indent, p.injectableType(), p);
                         updatePlan(p.injectableType(), depth + 1);
                         if (p.modifiers().contains(LIST)) {
-                            addStep(indent, new ListProxyResolveStep(p.injectableType()));
+                            rollUpAndResolveListProxy(p.injectableType(), depth, indent);
                         }
                     }
                 }
-                addStep(indent, new InstantiateStep(m));
+                addStep(new InstantiateStep(m), indent);
             } else if (spec instanceof AliasSpec a) {
-                LOGGER.trace("{}Recursing into subtype for {}", indent, a);
+                LOGGER.trace("{}- Recursing into subtype for {}", indent, a);
                 updatePlan(a.subtype(), depth + 1);
                 if (allParameterTypes.contains(a.requestedType()) == false) {
                     // Could be an opportunity for optimization here.
@@ -403,7 +423,7 @@ public class Injector {
                     // which types they'll pull directly, we could skip these.
                     LOGGER.trace("{}- Planning unused {}", indent, a);
                 }
-                addStep(indent, new RollUpStep(a.requestedType(), a.subtype()));
+                addStep(new RollUpStep(a.requestedType(), a.subtype()), indent);
             } else if (spec instanceof ExistingInstanceSpec e) {
                 LOGGER.trace("{}- Plan {}", indent, e);
                 // Nothing to do. The injector will already have the required object.
@@ -411,19 +431,26 @@ public class Injector {
                 if (requiredTypes.contains(a.requestedType())) {
                     throw new InjectionConfigurationException("Ambiguous injection spec for required type: " + a);
                 } else {
-                    LOGGER.trace("{}- Skipping {}", indent, a);
-                    // Nothing to do. Nobody could validly ask for an instance of an ambiguous class anyway;
-                    // this must be a class we encountered as a List, and that case is already handled before
-                    // we recurse to this point.
+                    // Nobody could validly ask for an instance of an ambiguous class, so
+                    // this must be a class we encountered as a List.
+                    // Ensure we generate the necessary rollups to ensure the list has all the right objects.
+                    LOGGER.trace("{}- Processing candidates for {}", indent, a.requestedType());
+                    a.candidates().forEach(candidate -> updatePlan(candidate, depth + 1));
                 }
             }
 
             finishedPlanning.add(spec);
         }
 
-        private void addStep(String indent, InjectionStep newStep) {
+        private void addStep(InjectionStep newStep, String indent) {
             LOGGER.trace("{}- Add step {}", indent, newStep);
             plan.add(newStep);
+        }
+
+        private void rollUpAndResolveListProxy(Class<?> elementType, int depth, String indent) {
+            LOGGER.trace("{}- Roll up and resolve {}", indent, elementType);
+            updatePlan(elementType, depth+1);
+            addStep(new ListProxyResolveStep(elementType), indent);
         }
 
     }
