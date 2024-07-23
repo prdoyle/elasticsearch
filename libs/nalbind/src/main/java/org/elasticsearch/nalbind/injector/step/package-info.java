@@ -6,8 +6,10 @@
  * Side Public License, v 1.
  */
 
-package org.elasticsearch.nalbind.injector.spec;
-
-public sealed interface InjectionSpec permits AmbiguousSpec, UnambiguousSpec {
-    Class<?> requestedType();
-}
+/**
+ * Objects that describe one operation to be performed by the <code>PlanInterpreter</code>.
+ * Injection is achieved by executing the steps in order.
+ * <p>
+ * See <code>PlanInterpreter</code> for more details on the execution model.
+ */
+package org.elasticsearch.nalbind.injector.step;
