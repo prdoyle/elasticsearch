@@ -22,15 +22,16 @@ public class ClassScannerTests extends ESTestCase {
     static final System.Logger logger = System.getLogger(ClassScannerTests.class.getName());
 
     public void testClassAndInterfaceHierarchy() throws IOException {
-        var reader = new ClassScanner(Type.getDescriptor(Extensible.class), (classname, map) -> {
-            map.put(classname, classname);
+        String annotation = Type.getDescriptor(Extensible.class);
+        var reader = new ClassScanner(Map.of(annotation, (className, map) -> {
+            map.put(className, className);
             return null;
-        });
+        }));
         List<ClassReader> classReaders = ClassReaders.ofClassPath();
         logger.log(System.Logger.Level.INFO, "classReaderStream size " + classReaders.size());
 
         reader.visit(classReaders);
-        Map<String, String> extensibleClasses = reader.getFoundClasses();
+        Map<String, String> extensibleClasses = reader.getFoundClasses(annotation);
 
         org.hamcrest.MatcherAssert.assertThat(
             extensibleClasses,

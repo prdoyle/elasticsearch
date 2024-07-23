@@ -36,10 +36,10 @@ public class AnnotatedHierarchyVisitorTests extends ESTestCase {
     @Before
     public void init() {
         foundClasses = new HashSet<>();
-        visitor = new AnnotatedHierarchyVisitor(Type.getDescriptor(Extensible.class), (className) -> {
+        visitor = new AnnotatedHierarchyVisitor(Map.of(Type.getDescriptor(Extensible.class), className -> {
             foundClasses.add(className);
             return null;
-        });
+        }));
     }
 
     public void testNoClassesAnnotated() throws IOException, URISyntaxException {

@@ -26,6 +26,7 @@ class PluginCli extends MultiCommand {
     PluginCli() {
         super("A tool for managing installed elasticsearch plugins");
         subcommands.put("list", new ListPluginsCommand());
+        subcommands.put("inject", new ScanAutoInjectablesCommand());
         subcommands.put("install", new InstallPluginCommand());
         subcommands.put("remove", new RemovePluginCommand());
         commands = Collections.unmodifiableCollection(subcommands.values());
