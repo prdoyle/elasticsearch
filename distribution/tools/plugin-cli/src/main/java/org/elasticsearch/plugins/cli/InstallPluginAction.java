@@ -37,6 +37,7 @@ import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.jdk.JarHell;
+import org.elasticsearch.plugin.scanner.AutoInjectionScanner;
 import org.elasticsearch.plugin.scanner.ClassReaders;
 import org.elasticsearch.plugin.scanner.NamedComponentScanner;
 import org.elasticsearch.plugins.Platforms;
@@ -73,6 +74,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -876,23 +878,44 @@ public class InstallPluginAction implements Closeable {
         // check for jar hell before any copying
         jarHellCheck(info, pluginRoot, env.pluginsFile(), env.modulesFile());
 
+        // TODO: We're doing two class scans here, which is slow. Try to combine them into one. ClassScanner supports this.
         if (info.isStable() && hasNamedComponentFile(pluginRoot) == false) {
-            generateNameComponentFile(pluginRoot);
+            generateNamedComponentFile(pluginRoot);
         }
+        if (hasAutoInjectFile(pluginRoot) == false) {
+            generateAutoInjectFile(pluginRoot);
+        }
+
         return info;
     }
 
-    private static void generateNameComponentFile(Path pluginRoot) throws IOException {
-        Stream<ClassReader> classPath = ClassReaders.ofClassPath().stream(); // contains plugin-api
-        List<ClassReader> classReaders = Stream.concat(ClassReaders.ofDirWithJars(pluginRoot).stream(), classPath).toList();
-        Map<String, Map<String, String>> namedComponentsMap = NamedComponentScanner.scanForNamedClasses(classReaders);
+    private static boolean hasNamedComponentFile(Path pluginRoot) {
+        return Files.exists(pluginRoot.resolve(PluginDescriptor.NAMED_COMPONENTS_FILENAME));
+    }
+
+    private static void generateNamedComponentFile(Path pluginRoot) throws IOException {
+        Map<String, Map<String, String>> namedComponentsMap = NamedComponentScanner.scanForNamedClasses(pluginClassReaders(pluginRoot));
         Path outputFile = pluginRoot.resolve(PluginDescriptor.NAMED_COMPONENTS_FILENAME);
         Files.createDirectories(outputFile.getParent());
         NamedComponentScanner.writeToFile(namedComponentsMap, outputFile);
     }
 
-    private static boolean hasNamedComponentFile(Path pluginRoot) {
-        return Files.exists(pluginRoot.resolve(PluginDescriptor.NAMED_COMPONENTS_FILENAME));
+    private static boolean hasAutoInjectFile(Path pluginRoot) {
+        return Files.exists(pluginRoot.resolve(PluginDescriptor.AUTO_INJECT_FILENAME));
+    }
+
+    private static void generateAutoInjectFile(Path pluginRoot) throws IOException {
+        Collection<String> classNames = AutoInjectionScanner.scanForAutoInjectableClasses(pluginClassReaders(pluginRoot));
+        Path outputFile = pluginRoot.resolve(PluginDescriptor.AUTO_INJECT_FILENAME);
+        Files.createDirectories(outputFile.getParent());
+        try (OutputStream outputStream = Files.newOutputStream(outputFile)) {
+            AutoInjectionScanner.writeTo(outputStream, classNames);
+        }
+    }
+
+    private static List<ClassReader> pluginClassReaders(Path pluginRoot) throws IOException {
+        Stream<ClassReader> classPath = ClassReaders.ofClassPath().stream(); // contains plugin-api
+        return Stream.concat(ClassReaders.ofDirWithJars(pluginRoot).stream(), classPath).toList();
     }
 
     private static final String LIB_TOOLS_PLUGIN_CLI_CLASSPATH_JAR;
