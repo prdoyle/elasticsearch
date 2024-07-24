@@ -44,6 +44,7 @@ public class PluginDescriptor implements Writeable, ToXContentObject {
     public static final String INTERNAL_DESCRIPTOR_FILENAME = "plugin-descriptor.properties";
     public static final String STABLE_DESCRIPTOR_FILENAME = "stable-plugin-descriptor.properties";
     public static final String NAMED_COMPONENTS_FILENAME = "named_components.json";
+    public static final String AUTO_INJECT_FILENAME = "auto-inject.json";
 
     public static final String ES_PLUGIN_POLICY = "plugin-security.policy";
 
