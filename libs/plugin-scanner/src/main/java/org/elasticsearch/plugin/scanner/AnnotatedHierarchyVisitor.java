@@ -23,17 +23,19 @@ import java.util.function.Function;
  */
 public class AnnotatedHierarchyVisitor extends ClassVisitor {
     private String currentClassName;
-    private final String targetAnnotationDescriptor;
-    // a function taking the current class name the target annotation appeared on, and returning an AnnotationVisitor
-    // that can be used to capture annotation specific args
-    private final Function<String, AnnotationVisitor> visitor;
+    private final Map<String, Function<String, AnnotationVisitor>> annotationVisitorsByAnnotationDescriptor;
     private final Map<String, Set<String>> classToSubclasses = new HashMap<>();
     private static final String OBJECT_NAME = Object.class.getCanonicalName().replace('.', '/');
 
-    AnnotatedHierarchyVisitor(String targetAnnotation, Function<String, AnnotationVisitor> annotationVisitor) {
+    /**
+     * @param annotationVisitorsByAnnotationDescriptor map whose keys are type descriptors of annotation classes,
+     *                                                 and whose values are functions that take the class name the
+     *                                                 target annotation appeared on, and return an {@link AnnotationVisitor}
+     *                                                 that can be used to capture annotation-specific args.
+     */
+    AnnotatedHierarchyVisitor(Map<String, Function<String, AnnotationVisitor>> annotationVisitorsByAnnotationDescriptor) {
         super(Opcodes.ASM9);
-        this.targetAnnotationDescriptor = targetAnnotation;
-        this.visitor = annotationVisitor;
+        this.annotationVisitorsByAnnotationDescriptor = annotationVisitorsByAnnotationDescriptor;
     }
 
     @Override
@@ -50,10 +52,12 @@ public class AnnotatedHierarchyVisitor extends ClassVisitor {
 
     @Override
     public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-        if (descriptor.equals(targetAnnotationDescriptor)) {
-            return visitor.apply(currentClassName);
+        var visitorFunction = annotationVisitorsByAnnotationDescriptor.get(descriptor);
+        if (visitorFunction == null) {
+            return null;
+        } else {
+            return visitorFunction.apply(currentClassName);
         }
-        return null;
     }
 
     /**
