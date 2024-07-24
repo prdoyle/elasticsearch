@@ -241,6 +241,7 @@ import org.elasticsearch.index.seqno.RetentionLeaseActions;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.indices.store.TransportNodesListShardStoreMetadata;
+import org.elasticsearch.nalbind.injector.Injector;
 import org.elasticsearch.persistent.CompletionPersistentTaskAction;
 import org.elasticsearch.persistent.RemovePersistentTaskAction;
 import org.elasticsearch.persistent.StartPersistentTaskAction;
@@ -253,6 +254,7 @@ import org.elasticsearch.repositories.VerifyNodeRepositoryAction;
 import org.elasticsearch.repositories.VerifyNodeRepositoryCoordinationAction;
 import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
 import org.elasticsearch.reservedstate.service.ReservedClusterStateService;
+import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestHeaderDefinition;
@@ -409,9 +411,15 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.usage.UsageService;
+import org.elasticsearch.xcontent.XContentParserConfiguration;
 
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -424,6 +432,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Collections.unmodifiableMap;
+import static java.util.Objects.requireNonNull;
+import static java.util.function.Predicate.not;
+import static org.elasticsearch.xcontent.XContentType.JSON;
 
 /**
  * Builds and binds the generic action map, all {@link TransportAction}s, and {@link ActionFilters}.
@@ -815,24 +826,308 @@ public class ActionModule extends AbstractModule {
         return new ActionFilters(Set.copyOf(finalFilters));
     }
 
-    public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
-        List<AbstractCatAction> catActions = new ArrayList<>();
-        Predicate<AbstractCatAction> catActionsFilter = restExtension.getCatActionsFilter();
-        Predicate<RestHandler> restFilter = restExtension.getActionsFilter();
-        Consumer<RestHandler> registerHandler = handler -> {
-            if (restFilter.test(handler)) {
-                if (handler instanceof AbstractCatAction catAction && catActionsFilter.test(catAction)) {
-                    catActions.add(catAction);
+    /**
+     * Lets us use injection to build the RestHandlers
+     */
+    public class RestHandlerInitializer {
+        private final Supplier<DiscoveryNodes> nodesInCluster;
+        private final Predicate<NodeFeature> clusterSupportsFeature;
+        private final List<RestHandler> nonPluginHandlers;
+
+        public RestHandlerInitializer(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature, List<RestHandler> nonPluginHandlers) {
+            this.nodesInCluster = nodesInCluster;
+            this.clusterSupportsFeature = clusterSupportsFeature;
+            this.nonPluginHandlers = nonPluginHandlers;
+        }
+
+        public void initRestHandlers() {
+            List<AbstractCatAction> catActions = new ArrayList<>();
+            Consumer<RestHandler> action = registerHandler(catActions);
+            nonPluginHandlers.forEach(action);
+
+            for (ActionPlugin plugin : actionPlugins) {
+                for (RestHandler handler : plugin.getRestHandlers(
+                    settings,
+                    namedWriteableRegistry,
+                    restController,
+                    clusterSettings,
+                    indexScopedSettings,
+                    settingsFilter,
+                    indexNameExpressionResolver,
+                    nodesInCluster,
+                    clusterSupportsFeature
+                )) {
+                    action.accept(handler);
                 }
-                restController.registerHandler(handler);
-            } else {
-                /*
-                 * There's no way this handler can be reached, so we just register a placeholder so that requests for it are routed to
-                 * RestController for proper error messages.
-                 */
-                handler.routes().forEach(route -> restController.registerHandler(route, placeholderRestHandler));
             }
-        };
+
+            action.accept(new RestCatAction(catActions));
+        }
+
+        public void registerCatHandler(Collection<AbstractCatAction> allCatActions) {
+            List<AbstractCatAction> filtered = allCatActions.stream().filter(restExtension.getCatActionsFilter()).toList();
+            logger.info("Register {} cat actions the new way", filtered.size());
+            // registerHandler(new ArrayList<>()).accept(new RestCatAction(filtered));
+        }
+    }
+
+    public void initRestHandlers(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        logger.debug("Starting initRestHandlers");
+        initRestHandlers_usingAutoInjectionScan(nodesInCluster, clusterSupportsFeature);
+        logger.debug("Done initRestHandlers ");
+    }
+
+    public void initRestHandlers_usingAutoInjectionScan(
+        Supplier<DiscoveryNodes> nodesInCluster,
+        Predicate<NodeFeature> clusterSupportsFeature
+    ) {
+        Injector injector = Injector.create(MethodHandles.lookup())
+            .addInstance(Supplier.class, nodesInCluster)           // cheese
+            .addInstance(Predicate.class, clusterSupportsFeature)  // cheese
+            .addInstances(threadPool, settings, settingsFilter, clusterSettings, restController.getSearchUsageHolder());
+
+        logger.debug("Loading auto_injectable.json");
+        List<?> classNameList;
+        try (
+            var is = getClass().getClassLoader().getResourceAsStream("auto_injectable.json");
+            var json = new BufferedInputStream(requireNonNull(is));
+            var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, json)
+        ) {
+            var map = parser.map();
+            classNameList = (List<?>) map.get("classes");
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        List<Class<?>> classes = classNameList.stream()
+            .map(String.class::cast)
+            .map((Function<String, Class<?>>) ActionModule::classForName)
+            .filter(c -> c != RestCatAction.class) // We handle this one specially
+            .filter(not(c -> Modifier.isAbstract(c.getModifiers())))
+            .filter(BaseRestHandler.class::isAssignableFrom) // TODO
+            .toList();
+        injector.addClasses(classes);
+
+        logger.debug("Calling inject()");
+        record InjectedThings(List<RestHandler> nonPluginHandlers){}
+        List<RestHandler> nonPluginHandlers = injector.inject(InjectedThings.class).nonPluginHandlers();
+
+        List<AbstractCatAction> catActions = new ArrayList<>();
+        Consumer<RestHandler> action = registerHandler(catActions);
+        nonPluginHandlers.forEach(action);
+
+        for (ActionPlugin plugin : actionPlugins) {
+            for (RestHandler handler : plugin.getRestHandlers(
+                settings,
+                namedWriteableRegistry,
+                restController,
+                clusterSettings,
+                indexScopedSettings,
+                settingsFilter,
+                indexNameExpressionResolver,
+                nodesInCluster,
+                clusterSupportsFeature
+            )) {
+                action.accept(handler);
+            }
+        }
+
+        action.accept(new RestCatAction(catActions));
+    }
+
+    public void initRestHandlers_usingExplicitList(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        Injector injector = Injector.create(MethodHandles.lookup())
+            .addInstance(Supplier.class, nodesInCluster)           // cheese
+            .addInstance(Predicate.class, clusterSupportsFeature)  // cheese
+            .addInstances(threadPool, settings, settingsFilter, clusterSettings, restController.getSearchUsageHolder())
+            .addClasses(
+                List.of(
+                    RestAddVotingConfigExclusionAction.class,
+                    RestClearVotingConfigExclusionsAction.class,
+                    RestNodesInfoAction.class,
+                    RestRemoteClusterInfoAction.class,
+                    RestNodesCapabilitiesAction.class,
+                    RestNodesStatsAction.class,
+                    RestNodesUsageAction.class,
+                    RestNodesHotThreadsAction.class,
+                    RestClusterAllocationExplainAction.class,
+                    RestGetDesiredBalanceAction.class,
+                    RestDeleteDesiredBalanceAction.class,
+                    RestClusterStatsAction.class,
+                    RestClusterStateAction.class,
+                    RestClusterHealthAction.class,
+                    RestClusterUpdateSettingsAction.class,
+                    RestClusterGetSettingsAction.class,
+                    RestClusterRerouteAction.class,
+                    RestClusterSearchShardsAction.class,
+                    RestPendingClusterTasksAction.class,
+                    RestPutRepositoryAction.class,
+                    RestGetRepositoriesAction.class,
+                    RestDeleteRepositoryAction.class,
+                    RestVerifyRepositoryAction.class,
+                    RestCleanupRepositoryAction.class,
+                    RestGetSnapshotsAction.class,
+                    RestCreateSnapshotAction.class,
+                    RestCloneSnapshotAction.class,
+                    RestRestoreSnapshotAction.class,
+                    RestDeleteSnapshotAction.class,
+                    RestSnapshotsStatusAction.class,
+                    RestSnapshottableFeaturesAction.class,
+                    RestResetFeatureStateAction.class,
+                    RestGetFeatureUpgradeStatusAction.class,
+                    RestPostFeatureUpgradeAction.class,
+                    RestGetIndicesAction.class,
+                    RestIndicesStatsAction.class,
+                    RestIndicesSegmentsAction.class,
+                    RestIndicesShardStoresAction.class,
+                    RestGetAliasesAction.class,
+                    RestIndexDeleteAliasesAction.class,
+                    RestIndexPutAliasAction.class,
+                    RestIndicesAliasesAction.class,
+                    RestCreateIndexAction.class,
+                    RestResizeHandler.RestShrinkIndexAction.class,
+                    RestResizeHandler.RestSplitIndexAction.class,
+                    RestResizeHandler.RestCloneIndexAction.class,
+                    RestRolloverIndexAction.class,
+                    RestDeleteIndexAction.class,
+                    RestCloseIndexAction.class,
+                    RestOpenIndexAction.class,
+                    RestAddIndexBlockAction.class,
+                    RestGetHealthAction.class,
+                    RestPrevalidateNodeRemovalAction.class,
+
+                    RestUpdateSettingsAction.class,
+                    RestGetSettingsAction.class,
+
+                    RestAnalyzeAction.class,
+                    RestReloadAnalyzersAction.class,
+                    RestGetIndexTemplateAction.class,
+                    RestPutIndexTemplateAction.class,
+                    RestDeleteIndexTemplateAction.class,
+                    RestPutComponentTemplateAction.class,
+                    RestGetComponentTemplateAction.class,
+                    RestDeleteComponentTemplateAction.class,
+                    RestPutComposableIndexTemplateAction.class,
+                    RestGetComposableIndexTemplateAction.class,
+                    RestDeleteComposableIndexTemplateAction.class,
+                    RestSimulateIndexTemplateAction.class,
+                    RestSimulateIngestAction.class,
+                    RestSimulateTemplateAction.class,
+
+                    RestPutMappingAction.class,
+                    RestGetMappingAction.class,
+                    RestGetFieldMappingAction.class,
+
+                    RestRefreshAction.class,
+                    RestFlushAction.class,
+                    RestSyncedFlushAction.class,
+                    RestForceMergeAction.class,
+                    RestClearIndicesCacheAction.class,
+                    RestResolveClusterAction.class,
+                    RestResolveIndexAction.class,
+
+                    RestIndexAction.class,
+                    CreateHandler.class,
+                    AutoIdHandler.class,
+                    RestGetAction.class,
+                    RestGetSourceAction.class,
+                    RestMultiGetAction.class,
+                    RestDeleteAction.class,
+                    RestCountAction.class,
+                    RestTermVectorsAction.class,
+                    RestMultiTermVectorsAction.class,
+                    RestBulkAction.class,
+                    RestUpdateAction.class,
+
+                    RestSearchAction.class,
+                    RestSearchScrollAction.class,
+                    RestClearScrollAction.class,
+                    RestOpenPointInTimeAction.class,
+                    RestClosePointInTimeAction.class,
+                    RestMultiSearchAction.class,
+                    RestKnnSearchAction.class,
+
+                    RestValidateQueryAction.class,
+
+                    RestExplainAction.class,
+
+                    RestRecoveryAction.class,
+
+                    RestReloadSecureSettingsAction.class,
+
+                    // Scripts API
+                    RestGetStoredScriptAction.class,
+                    RestPutStoredScriptAction.class,
+                    RestDeleteStoredScriptAction.class,
+                    RestGetScriptContextAction.class,
+                    RestGetScriptLanguageAction.class,
+
+                    RestFieldCapabilitiesAction.class,
+
+                    // Tasks API
+                    RestListTasksAction.class,
+                    RestGetTaskAction.class,
+                    RestCancelTasksAction.class,
+
+                    // Ingest API
+                    RestPutPipelineAction.class,
+                    RestGetPipelineAction.class,
+                    RestDeletePipelineAction.class,
+                    RestSimulatePipelineAction.class,
+
+                    // Dangling indices API
+                    RestListDanglingIndicesAction.class,
+                    RestImportDanglingIndexAction.class,
+                    RestDeleteDanglingIndexAction.class,
+
+                    // CAT API
+                    RestAllocationAction.class,
+                    RestShardsAction.class,
+                    RestMasterAction.class,
+                    RestNodesAction.class,
+                    RestClusterInfoAction.class,
+                    RestTasksAction.class,
+                    RestIndicesAction.class,
+                    RestSegmentsAction.class,
+                    // Fully qualified to prevent interference with rest.action.count.RestCountAction
+                    org.elasticsearch.rest.action.cat.RestCountAction.class,
+                    RestCatRecoveryAction.class,
+                    RestHealthAction.class,
+                    org.elasticsearch.rest.action.cat.RestPendingClusterTasksAction.class,
+                    RestAliasAction.class,
+                    RestThreadPoolAction.class,
+                    RestPluginsAction.class,
+                    RestFielddataAction.class,
+                    RestNodeAttrsAction.class,
+                    RestRepositoriesAction.class,
+                    RestSnapshotAction.class,
+                    RestTemplatesAction.class,
+                    RestCatComponentTemplateAction.class,
+                    RestAnalyzeIndexDiskUsageAction.class,
+                    RestFieldUsageStatsAction.class,
+
+                    RestUpgradeActionDeprecated.class,
+
+                    // Desired nodes
+                    RestGetDesiredNodesAction.class,
+                    RestUpdateDesiredNodesAction.class,
+                    RestDeleteDesiredNodesAction.class,
+
+                    // Synonyms
+                    RestPutSynonymsAction.class,
+                    RestGetSynonymsAction.class,
+                    RestDeleteSynonymsAction.class,
+                    RestGetSynonymsSetsAction.class,
+                    RestPutSynonymRuleAction.class,
+                    RestGetSynonymRuleAction.class,
+                    RestDeleteSynonymRuleAction.class
+                )
+            );
+        injector.inject(RestHandlerInitializer.class).initRestHandlers();
+    }
+
+    public void initRestHandlers_theOldWay(Supplier<DiscoveryNodes> nodesInCluster, Predicate<NodeFeature> clusterSupportsFeature) {
+        List<AbstractCatAction> catActions = new ArrayList<>();
+        Consumer<RestHandler> registerHandler = registerHandler(catActions);
         registerHandler.accept(new RestAddVotingConfigExclusionAction());
         registerHandler.accept(new RestClearVotingConfigExclusionsAction());
         registerHandler.accept(new RestNodesInfoAction(settingsFilter));
@@ -1005,6 +1300,15 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestUpdateDesiredNodesAction(clusterSupportsFeature));
         registerHandler.accept(new RestDeleteDesiredNodesAction());
 
+        // Synonyms
+        registerHandler.accept(new RestPutSynonymsAction());
+        registerHandler.accept(new RestGetSynonymsAction());
+        registerHandler.accept(new RestDeleteSynonymsAction());
+        registerHandler.accept(new RestGetSynonymsSetsAction());
+        registerHandler.accept(new RestPutSynonymRuleAction());
+        registerHandler.accept(new RestGetSynonymRuleAction());
+        registerHandler.accept(new RestDeleteSynonymRuleAction());
+
         for (ActionPlugin plugin : actionPlugins) {
             for (RestHandler handler : plugin.getRestHandlers(
                 settings,
@@ -1020,16 +1324,50 @@ public class ActionModule extends AbstractModule {
                 registerHandler.accept(handler);
             }
         }
-        registerHandler.accept(new RestCatAction(catActions));
 
-        // Synonyms
-        registerHandler.accept(new RestPutSynonymsAction());
-        registerHandler.accept(new RestGetSynonymsAction());
-        registerHandler.accept(new RestDeleteSynonymsAction());
-        registerHandler.accept(new RestGetSynonymsSetsAction());
-        registerHandler.accept(new RestPutSynonymRuleAction());
-        registerHandler.accept(new RestGetSynonymRuleAction());
-        registerHandler.accept(new RestDeleteSynonymRuleAction());
+        registerHandler.accept(new RestCatAction(catActions));
+    }
+
+    private static Class<?> classForName(String name) {
+        try {
+            return Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Returns a {@link Consumer} that does several things for each {@link RestHandler} it's given:
+     *
+     * <ul>
+     *     <li>
+     *         Primarily: if the handler is exposed by {@link RestExtension#getActionsFilter()},
+     *         then it's passed to {@link RestController#registerHandler(RestHandler)};
+     *         otherwise, all the handler's routes are configured to return an error.
+     *     </li>
+     *     <li>
+     *         Secondarily: If it's also an {@link AbstractCatAction} and is permitted by
+     *         {@link RestExtension#getCatActionsFilter()} then it's added to <code>catActions</code>.
+     *     </li>
+     * </ul>
+     */
+    private Consumer<RestHandler> registerHandler(List<AbstractCatAction> catActions) {
+        Predicate<AbstractCatAction> catActionsFilter = restExtension.getCatActionsFilter();
+        Predicate<RestHandler> restFilter = restExtension.getActionsFilter();
+        return handler -> {
+            if (restFilter.test(handler)) {
+                if (handler instanceof AbstractCatAction catAction && catActionsFilter.test(catAction)) {
+                    catActions.add(catAction);
+                }
+                restController.registerHandler(handler);
+            } else {
+                /*
+                 * There's no way this handler can be reached, so we just register a placeholder so that requests for it are routed to
+                 * RestController for proper error messages.
+                 */
+                handler.routes().forEach(route -> restController.registerHandler(route, placeholderRestHandler));
+            }
+        };
     }
 
     @Override
