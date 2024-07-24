@@ -12,6 +12,7 @@ import org.apache.logging.log4j.Level;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.RestApiVersion;
+import org.elasticsearch.nalbind.api.AutoInjectable;
 import org.elasticsearch.rest.RestRequest.Method;
 import org.elasticsearch.xcontent.XContent;
 
@@ -23,6 +24,7 @@ import java.util.Set;
 /**
  * Handler for REST requests
  */
+@AutoInjectable
 @FunctionalInterface
 public interface RestHandler {
 
