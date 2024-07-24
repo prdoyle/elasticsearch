@@ -887,6 +887,7 @@ public class InstallPluginAction implements Closeable {
         List<ClassReader> classReaders = Stream.concat(ClassReaders.ofDirWithJars(pluginRoot).stream(), classPath).toList();
         Map<String, Map<String, String>> namedComponentsMap = NamedComponentScanner.scanForNamedClasses(classReaders);
         Path outputFile = pluginRoot.resolve(PluginDescriptor.NAMED_COMPONENTS_FILENAME);
+        Files.createDirectories(outputFile.getParent());
         NamedComponentScanner.writeToFile(namedComponentsMap, outputFile);
     }
 
