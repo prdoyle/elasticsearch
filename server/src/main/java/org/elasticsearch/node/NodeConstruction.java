@@ -853,6 +853,17 @@ class NodeConstruction {
 
             // Then, injection
             List<Class<?>> autoInjectableClasses = autoInjectables.toList();
+            if (autoInjectableClasses.isEmpty()) {
+                // HACK
+                if ("Downsample".equalsIgnoreCase(plugin.getClass().getSimpleName())) {
+                    try {
+                        autoInjectableClasses = List.of(Class.forName("org.elasticsearch.xpack.downsample.DownsampleMetrics", true, plugin.getClass().getClassLoader()));
+                        logger.info("NALBIND - Found DownsampleMetrics");
+                    } catch (ClassNotFoundException e) {
+                        throw new IllegalStateException(e);
+                    }
+                }
+            }
             Collection<?> autoInjectedComponents;
             if (autoInjectableClasses.isEmpty()) {
                 autoInjectedComponents = Set.of();
