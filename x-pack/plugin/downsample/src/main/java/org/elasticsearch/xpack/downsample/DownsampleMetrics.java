@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.downsample;
 
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
+import org.elasticsearch.nalbind.api.AutoInjectable;
 import org.elasticsearch.nalbind.api.Inject;
 import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
@@ -29,6 +30,7 @@ import java.util.Map;
  *  - If needed, inject {@link DownsampleMetrics} to the action containing the logic
  *    that records the metric value. For reference, see {@link TransportDownsampleIndexerAction}.
  */
+@AutoInjectable
 public class DownsampleMetrics extends AbstractLifecycleComponent {
 
     public static final String LATENCY_SHARD = "es.tsdb.downsample.latency.shard.histogram";
