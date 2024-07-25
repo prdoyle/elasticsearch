@@ -91,13 +91,6 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
             Objects.requireNonNull(layer);
         }
 
-        /**
-         * Creates a loaded <i>classpath plugin</i>. A <i>classpath plugin</i> is a plugin loaded
-         * by the system classloader and defined to the unnamed module of the boot layer.
-         */
-        LoadedPlugin(PluginDescriptor descriptor, Plugin instance) {
-            this(descriptor, instance, PluginsService.class.getClassLoader(), ModuleLayer.boot());
-        }
     }
 
     private static final Logger logger = LogManager.getLogger(PluginsService.class);

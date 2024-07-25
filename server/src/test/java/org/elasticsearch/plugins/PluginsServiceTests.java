@@ -463,7 +463,7 @@ public class PluginsServiceTests extends ESTestCase {
         var classname = "FakePlugin";
         PluginsService.loadExtensions(
             List.of(
-                new PluginsService.LoadedPlugin(
+                classpathPlugin(
                     new PluginDescriptor("extensible", null, null, null, null, classname, null, List.of(), false, false, false, false),
                     extensiblePlugin
                 )
@@ -477,11 +477,11 @@ public class PluginsServiceTests extends ESTestCase {
         TestPlugin testPlugin = new TestPlugin();
         PluginsService.loadExtensions(
             List.of(
-                new PluginsService.LoadedPlugin(
+                classpathPlugin(
                     new PluginDescriptor("extensible", null, null, null, null, classname, null, List.of(), false, false, false, false),
                     extensiblePlugin
                 ),
-                new PluginsService.LoadedPlugin(
+                classpathPlugin(
                     new PluginDescriptor(
                         "test",
                         null,
@@ -506,6 +506,10 @@ public class PluginsServiceTests extends ESTestCase {
         assertThat(extensiblePlugin.extensions.get(0), instanceOf(TestExtension1.class));
         assertThat(extensiblePlugin.extensions.get(1), instanceOf(TestExtension2.class));
         assertThat(((TestExtension2) extensiblePlugin.extensions.get(1)).plugin, sameInstance(testPlugin));
+    }
+
+    private PluginsService.LoadedPlugin classpathPlugin(PluginDescriptor descriptor, Plugin instance) {
+        return new PluginsService.LoadedPlugin(descriptor, instance, PluginsService.class.getClassLoader(), ModuleLayer.boot());
     }
 
     public void testNoExtensionConstructors() {
