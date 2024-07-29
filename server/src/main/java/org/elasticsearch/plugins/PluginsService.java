@@ -27,10 +27,13 @@ import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.core.Tuple;
 import org.elasticsearch.jdk.JarHell;
 import org.elasticsearch.jdk.ModuleQualifiedExportsService;
+import org.elasticsearch.nalbind.injector.Injector;
 import org.elasticsearch.node.ReportingService;
 import org.elasticsearch.plugins.scanners.StablePluginsRegistry;
 import org.elasticsearch.plugins.spi.SPIClassIterator;
+import org.elasticsearch.xcontent.XContentParserConfiguration;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.lang.ModuleLayer.Controller;
 import java.lang.module.Configuration;
@@ -40,6 +43,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
@@ -56,15 +60,20 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.util.Collections.emptyList;
+import static java.util.stream.Collectors.toSet;
 import static org.elasticsearch.common.io.FileSystemUtils.isAccessibleDirectory;
 import static org.elasticsearch.jdk.ModuleQualifiedExportsService.addExportsService;
 import static org.elasticsearch.jdk.ModuleQualifiedExportsService.exposeQualifiedExportsAndOpens;
+import static org.elasticsearch.plugins.PluginDescriptor.AUTO_INJECTABLE_FILENAME;
+import static org.elasticsearch.xcontent.XContentType.JSON;
 
 public class PluginsService implements ReportingService<PluginsAndModules> {
 
@@ -79,21 +88,29 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
      * @param loader   The classloader for the plugin
      * @param layer   The module layer for the plugin
      */
-    record LoadedPlugin(PluginDescriptor descriptor, Plugin instance, ClassLoader loader, ModuleLayer layer) {
+    record LoadedPlugin(
+        PluginDescriptor descriptor,
+        Plugin instance,
+        ClassLoader loader,
+        ModuleLayer layer,
+        Collection<Class<?>> injectableClasses
+    ) {
 
         LoadedPlugin {
             Objects.requireNonNull(descriptor);
             Objects.requireNonNull(instance);
             Objects.requireNonNull(loader);
             Objects.requireNonNull(layer);
+            Objects.requireNonNull(injectableClasses);
         }
 
         /**
          * Creates a loaded <i>classpath plugin</i>. A <i>classpath plugin</i> is a plugin loaded
-         * by the system classloader and defined to the unnamed module of the boot layer.
+         * by the system classloader and defined to the unnamed module of the boot layer,
+         * having no injectable classes.
          */
         LoadedPlugin(PluginDescriptor descriptor, Plugin instance) {
-            this(descriptor, instance, PluginsService.class.getClassLoader(), ModuleLayer.boot());
+            this(descriptor, instance, PluginsService.class.getClassLoader(), ModuleLayer.boot(), List.of());
         }
     }
 
@@ -251,6 +268,16 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
      */
     public final <T> Stream<T> flatMap(Function<Plugin, Collection<T>> function) {
         return plugins().stream().map(LoadedPlugin::instance).flatMap(p -> function.apply(p).stream());
+    }
+
+    /**
+     * FlatMap a function over all plugins
+     * @param function a function that takes a plugin plus a collection of auto-injectable classes for that plugin, and returns a collection
+     * @return A stream of results
+     * @param <T> The generic type of the collection
+     */
+    public final <T> Stream<T> flatMap(BiFunction<Plugin, Collection<Class<?>>, Collection<T>> function) {
+        return plugins().stream().flatMap(lp -> function.apply(lp.instance(), lp.injectableClasses()).stream());
     }
 
     /**
@@ -530,9 +557,44 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
                 }
                 plugin = loadPlugin(pluginClass, settings, configPath);
             }
-            loaded.put(name, new LoadedPlugin(bundle.plugin, plugin, spiLayerAndLoader.loader(), spiLayerAndLoader.layer()));
+            loaded.put(name, new LoadedPlugin(
+                bundle.plugin,
+                plugin,
+                spiLayerAndLoader.loader(),
+                spiLayerAndLoader.layer(),
+                readInjectableClasses(bundle.getDir(), pluginClassLoader)));
         } finally {
             privilegedSetContextClassLoader(cl);
+        }
+    }
+
+    private Collection<Class<?>> readInjectableClasses(Path dir, ClassLoader pluginClassLoader) {
+        Path path = dir.resolve(AUTO_INJECTABLE_FILENAME);
+        if (Files.exists(path)) {
+            List<?> classNameList;
+            try (var is = new BufferedInputStream(Files.newInputStream(path));
+                 var json = new BufferedInputStream(is);
+                 var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, json)
+            ) {
+                var map = parser.map();
+                classNameList = (List<?>) map.get("classes");
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            }
+            return classNameList.stream()
+                .map(String.class::cast)
+                .map(name -> classForName(name, pluginClassLoader))
+                .collect(toSet());
+        } else {
+            return emptyList();
+        }
+    }
+
+    private Class<?> classForName(String name, ClassLoader classLoader) {
+        try {
+            return Class.forName(name, false, classLoader);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(e);
         }
     }
 

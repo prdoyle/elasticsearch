@@ -157,7 +157,6 @@ import org.elasticsearch.plugins.MetadataUpgrader;
 import org.elasticsearch.plugins.NetworkPlugin;
 import org.elasticsearch.plugins.PersistentTaskPlugin;
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.plugins.PluginDescriptor;
 import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.plugins.RecoveryPlannerPlugin;
 import org.elasticsearch.plugins.ReloadablePlugin;
@@ -180,8 +179,6 @@ import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
 import org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider;
 import org.elasticsearch.reservedstate.action.ReservedClusterSettingsAction;
 import org.elasticsearch.reservedstate.service.FileSettingsService;
-import org.elasticsearch.rest.BaseRestHandler;
-import org.elasticsearch.rest.action.cat.RestCatAction;
 import org.elasticsearch.rest.action.search.SearchResponseMetrics;
 import org.elasticsearch.script.ScriptModule;
 import org.elasticsearch.script.ScriptService;
@@ -209,13 +206,12 @@ import org.elasticsearch.upgrades.SystemIndexMigrationExecutor;
 import org.elasticsearch.usage.UsageService;
 import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
-import org.elasticsearch.xcontent.XContentParserConfiguration;
 
-import java.io.BufferedInputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -232,11 +228,8 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.util.Collections.emptyList;
-import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toSet;
 import static org.elasticsearch.core.Types.forciblyCast;
-import static org.elasticsearch.xcontent.XContentType.JSON;
 
 /**
  * Class uses to perform all the operations needed to construct a {@link Node} instance.
@@ -862,17 +855,26 @@ class NodeConstruction {
             documentParsingProvider
         );
 
-        Collection<?> pluginComponents = pluginsService.flatMap(p -> {
+        Collection<?> pluginComponents = pluginsService.flatMap((plugin, autoInjectableClasses) -> {
             // Create some components using createComponents
-            Collection<?> createdComponents = p.createComponents(pluginServices);
+            Collection<?> createdComponents = plugin.createComponents(pluginServices);
+            Object[] ordinaryComponents = createdComponents.stream().filter(c -> c instanceof PluginComponentBinding == false).toArray();
 
             // Create more using the nalbind injector
-            Collection<Class<?>> autoInjectableClasses = pluginAutoInjectableClasses(p);
-            ObjectGraph objectGraph = org.elasticsearch.nalbind.injector.Injector.create()
-                .addRecordComponents(pluginServices)
-                .addInstances(createdComponents.toArray())
+            org.elasticsearch.nalbind.injector.Injector nalbind = org.elasticsearch.nalbind.injector.Injector.create()
                 .addClasses(autoInjectableClasses)
-                .inject();
+                .addInstances(ordinaryComponents)
+                .addInstances( // Everything from pluginServices
+                    Stream.of(pluginServices.getClass().getRecordComponents())
+                        .map(rc -> recordComponentValue(rc, pluginServices))
+                        .toArray()
+                );
+            createdComponents.forEach(c -> {
+                if (c instanceof PluginComponentBinding<?,?> p) {
+                    addPluginComponentBinding(p, nalbind);
+                }
+            });
+            ObjectGraph objectGraph = nalbind.inject();
 
             // Combine them
             return Stream.concat(
@@ -1191,6 +1193,18 @@ class NodeConstruction {
         postInjection(clusterModule, actionModule, clusterService, transportService, featureService);
     }
 
+    private static <I, T extends I> void addPluginComponentBinding(PluginComponentBinding<I,T> p, org.elasticsearch.nalbind.injector.Injector nalbind) {
+        nalbind.addInstance(p.inter(), p.inter().cast(p.impl()));
+    }
+
+    private Object recordComponentValue(RecordComponent rc, Record record) {
+        try {
+            return rc.getAccessor().invoke(record);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private ClusterService createClusterService(SettingsModule settingsModule, ThreadPool threadPool, TaskManager taskManager) {
         ClusterService clusterService = new ClusterService(
             settingsModule.getSettings(),
@@ -1310,37 +1324,6 @@ class NodeConstruction {
             b.bind(HealthApiStats.class).toInstance(new HealthApiStats());
             b.bind(HealthPeriodicLogger.class).toInstance(healthPeriodicLogger);
         };
-    }
-
-    private Collection<Class<?>> pluginAutoInjectableClasses(Plugin plugin) {
-        // Copied shamelessly from ActionModule
-        List<?> classNameList;
-        try (var is = getClass().getClassLoader().getResourceAsStream("auto_injectable.json")) {
-            if (is == null) {
-                return emptyList();
-            } else {
-                try (var json = new BufferedInputStream(is)) {
-                    try (var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, json)) {
-                        var map = parser.map();
-                        classNameList = (List<?>) map.get("classes");
-                    }
-                }
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-        return classNameList.stream()
-            .map(String.class::cast)
-            .map(name -> classForName(name, plugin))
-            .collect(toSet());
-    }
-
-    private Class<?> classForName(String name, Plugin plugin) {
-        try {
-            return plugin.getClass().getClassLoader().loadClass(name);
-        } catch (ClassNotFoundException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     private Module loadPluginComponents(Collection<?> pluginComponents) {

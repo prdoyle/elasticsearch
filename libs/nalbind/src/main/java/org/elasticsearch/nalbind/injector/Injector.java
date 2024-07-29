@@ -357,9 +357,9 @@ public class Injector {
          */
         void doInjection(Map<Class<?>, InjectionSpec> specsByClass) {
             List<UnambiguousSpec> plan = instantiationPlan(specsByClass);
-            createProxies(plan);
+//            createProxies(plan);
             executeInstantiationPlan(plan);
-            resolveProxies();
+//            resolveProxies();
             LOGGER.debug("Starting @Injected");
             reportInjectedObjects(specsByClass);
         }
