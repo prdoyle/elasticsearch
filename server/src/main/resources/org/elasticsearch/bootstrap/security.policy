@@ -64,7 +64,6 @@ grant codeBase "${codebase.elasticsearch-core}" {
 
 //grant codeBase "${codebase.elasticsearch-nalbind}" {
 grant {
-  permission java.lang.RuntimePermission "accessDeclaredMembers";
   permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
 };
 
