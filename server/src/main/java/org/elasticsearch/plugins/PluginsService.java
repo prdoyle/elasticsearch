@@ -28,6 +28,7 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.jdk.JarHell;
 import org.elasticsearch.jdk.ModuleQualifiedExportsService;
 import org.elasticsearch.node.ReportingService;
+import org.elasticsearch.plugins.scanners.AutoInjectableReader;
 import org.elasticsearch.plugins.scanners.StablePluginsRegistry;
 import org.elasticsearch.plugins.spi.SPIClassIterator;
 
@@ -56,6 +57,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -75,11 +77,12 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
     /**
      * A loaded plugin is one for which Elasticsearch has successfully constructed an instance of the plugin's class
      * @param descriptor Metadata about the plugin, usually loaded from plugin properties
+     * @param dir      The plugin's bundle directory
      * @param instance The constructed instance of the plugin's main class
      * @param loader   The classloader for the plugin
      * @param layer   The module layer for the plugin
      */
-    record LoadedPlugin(PluginDescriptor descriptor, Plugin instance, ClassLoader loader, ModuleLayer layer) {
+    record LoadedPlugin(PluginDescriptor descriptor, Path dir, Plugin instance, ClassLoader loader, ModuleLayer layer) {
 
         LoadedPlugin {
             Objects.requireNonNull(descriptor);
@@ -251,6 +254,29 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
      */
     public final <T> Stream<T> flatMap(Function<Plugin, Collection<T>> function) {
         return plugins().stream().map(LoadedPlugin::instance).flatMap(p -> function.apply(p).stream());
+    }
+
+    /**
+     * FlatMap a function over all plugins
+     * @param function a function that takes a plugin and a Stream of its {@link org.elasticsearch.nalbind.api.AutoInjectable} classes,
+     *                 and returns a collection
+     * @return A stream of results
+     * @param <T> The generic type of the collection
+     */
+    public final <T> Stream<T> flatMap(BiFunction<Plugin, Stream<Class<?>>, Collection<T>> function) {
+        return plugins().stream().flatMap(p -> {
+            Stream<Class<?>> autoInjectableClasses;
+            if (p.dir() == null) {
+                autoInjectableClasses = Stream.empty();
+            } else {
+                try {
+                    autoInjectableClasses = new AutoInjectableReader().autoInjectableClasses(p.dir(), p.loader());
+                } catch (IOException e) {
+                    throw new IllegalStateException("Unable to read AutoInjectable classes", e);
+                }
+            }
+            return function.apply(p.instance(), autoInjectableClasses).stream();
+        });
     }
 
     /**
@@ -530,7 +556,7 @@ public class PluginsService implements ReportingService<PluginsAndModules> {
                 }
                 plugin = loadPlugin(pluginClass, settings, configPath);
             }
-            loaded.put(name, new LoadedPlugin(bundle.plugin, plugin, spiLayerAndLoader.loader(), spiLayerAndLoader.layer()));
+            loaded.put(name, new LoadedPlugin(bundle.plugin, bundle.getDir(), plugin, spiLayerAndLoader.loader(), spiLayerAndLoader.layer()));
         } finally {
             privilegedSetContextClassLoader(cl);
         }
