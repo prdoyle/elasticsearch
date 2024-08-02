@@ -210,9 +210,11 @@ import org.elasticsearch.xcontent.NamedXContentRegistry;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -225,6 +227,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.util.Collections.newSetFromMap;
 import static org.elasticsearch.core.Types.forciblyCast;
 
 /**
@@ -865,7 +868,33 @@ class NodeConstruction {
             documentParsingProvider
         );
 
-        Collection<?> pluginComponents = pluginsService.flatMap(p -> p.createComponents(pluginServices)).toList();
+        Collection<?> pluginComponents = pluginsService.flatMap((plugin, autoInjectables) -> {
+            // First, createComponents
+            Collection<?> explicitComponents = plugin.createComponents(pluginServices);
+
+            // Then, injection
+            List<Class<?>> autoInjectableClasses = autoInjectables.toList();
+            Collection<?> autoInjectedComponents;
+            if (autoInjectableClasses.isEmpty()) {
+                autoInjectedComponents = Set.of();
+            } else {
+                logger.info("NALBIND - doing component injection for " + plugin.getClass().getSimpleName());
+                var injector = org.elasticsearch.nalbind.injector.Injector.create(MethodHandles.lookup());
+                injector.addInstances(explicitComponents);
+                injector.addRecordContents(pluginServices);
+                var resultMap = injector.inject(autoInjectableClasses);
+
+                // For now, assume we want all auto-injectable components added to the Guice injector
+                var distinctObjects = newSetFromMap(new IdentityHashMap<>());
+                resultMap.values().forEach(distinctObjects::addAll);
+                autoInjectedComponents = distinctObjects;
+            }
+
+            // Return both
+            return Stream.of(explicitComponents, autoInjectedComponents)
+                .flatMap(Collection::stream)
+                .toList();
+        }).toList();
 
         var terminationHandlers = pluginsService.loadServiceProviders(TerminationHandlerProvider.class)
             .stream()
