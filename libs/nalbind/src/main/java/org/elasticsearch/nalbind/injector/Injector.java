@@ -175,7 +175,7 @@ public final class Injector {
      * Like {@link #inject(Class)} but can return multiple result objects
      * @return {@link Map} whose keys are all the requested <code>resultTypes</code> and whose values are all the instances of those types.
      */
-    public Map<Class<?>, List<?>> inject(Collection<? extends Class<?>> resultTypes) {
+    public Map<Class<?>, List<?>> inject(Collection<Class<?>> resultTypes) {
         resultTypes.forEach(this::ensureClassIsSpecified);
         PlanInterpreter i = doInjection();
         return resultTypes.stream()
