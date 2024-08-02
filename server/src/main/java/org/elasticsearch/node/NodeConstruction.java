@@ -210,11 +210,9 @@ import org.elasticsearch.xcontent.NamedXContentRegistry;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -227,8 +225,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.util.Collections.newSetFromMap;
-import static java.util.function.Predicate.not;
 import static org.elasticsearch.core.Types.forciblyCast;
 
 /**
@@ -869,32 +865,7 @@ class NodeConstruction {
             documentParsingProvider
         );
 
-        Collection<?> pluginComponents = pluginsService.flatMap(plugin -> {
-            Collection<?> allItems = plugin.createComponents(pluginServices);
-            List<?> componentObjects = allItems.stream().filter(not(x -> x instanceof Class<?>)).toList();
-            List<? extends Class<?>> classes = allItems.stream().filter(x -> x instanceof Class<?>).map(x -> (Class<?>) x).toList();
-
-            // Then, injection
-            Collection<?> componentsFromInjector;
-            if (classes.isEmpty()) {
-                componentsFromInjector = Set.of();
-            } else {
-                logger.info("NALBIND - doing component injection for " + plugin.getClass().getSimpleName());
-                var injector = org.elasticsearch.nalbind.injector.Injector.create(MethodHandles.lookup());
-                injector.addInstances(componentObjects);
-                injector.addRecordContents(pluginServices);
-                var resultMap = injector.inject(classes);
-                // For now, assume we want all components added to the Guice injector
-                var distinctObjects = newSetFromMap(new IdentityHashMap<>());
-                resultMap.values().forEach(distinctObjects::addAll);
-                componentsFromInjector = distinctObjects;
-            }
-
-            // Return both
-            return Stream.of(componentObjects, componentsFromInjector)
-                .flatMap(Collection::stream)
-                .toList();
-        }).toList();
+        Collection<?> pluginComponents = pluginsService.flatMap(p -> p.createComponents(pluginServices)).toList();
 
         var terminationHandlers = pluginsService.loadServiceProviders(TerminationHandlerProvider.class)
             .stream()
