@@ -67,7 +67,7 @@ public final class Injector {
      * There are only three ways the injector can find out that it must instantiate some class:
      * <ol>
      *     <li>
-     *         This method
+     *         This method (which is also used to implement {@link org.elasticsearch.nalbind.api.AutoInjectable @Autoinjectable})
      *     </li>
      *     <li>
      *         The parameter passed to {@link #inject}
