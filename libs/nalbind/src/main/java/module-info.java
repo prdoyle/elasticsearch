@@ -1,7 +1,7 @@
 module org.elasticsearch.nalbind {
-    exports org.elasticsearch.injection.api;
-    exports org.elasticsearch.injection.exceptions;
-    exports org.elasticsearch.injection;
+    exports org.elasticsearch.nalbind.api;
+    exports org.elasticsearch.nalbind.injector;
+    exports org.elasticsearch.nalbind.exceptions;
 
     requires org.elasticsearch.logging;
 }

@@ -6,14 +6,13 @@
  * Side Public License, v 1.
  */
 
-package org.elasticsearch.testSupport;
+package org.elasticsearch.nalbind.injector.spec;
 
-import org.elasticsearch.nalbind.injector.Injector;
-
-public class InjectorTestSupport {
-    public Class<?> addLocalClassToInjector(Injector injector) {
-        record LocalClass(){}
-        injector.addClass(LocalClass.class);
-        return LocalClass.class;
+public record ExistingInstanceSpec(Class<?> requestedType, Object instance)
+    implements UnambiguousSpec {
+    @Override
+    public String toString() {
+        // Don't call instance.toString; who knows what that will return
+        return "ExistingInstanceSpec[" + "requestedType=" + requestedType + ']';
     }
 }

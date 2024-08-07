@@ -6,13 +6,9 @@
  * Side Public License, v 1.
  */
 
-apply plugin: 'elasticsearch.build'
-apply plugin: 'elasticsearch.publish'
+package org.elasticsearch.nalbind.injector.spec;
 
-dependencies {
-  compileOnly project(':libs:elasticsearch-logging')
-
-  testImplementation(project(":test:framework")) {
-    exclude group: 'org.elasticsearch', module: 'elasticsearch-nalbind'
-  }
-}
+/**
+ * Indicates that a type should be injected as though the requester had asked for some subtype instead.
+ */
+public record AliasSpec(Class<?> requestedType, Class<?> subtype) implements UnambiguousSpec {}

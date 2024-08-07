@@ -6,13 +6,10 @@
  * Side Public License, v 1.
  */
 
-apply plugin: 'elasticsearch.build'
-apply plugin: 'elasticsearch.publish'
-
-dependencies {
-  compileOnly project(':libs:elasticsearch-logging')
-
-  testImplementation(project(":test:framework")) {
-    exclude group: 'org.elasticsearch', module: 'elasticsearch-nalbind'
-  }
-}
+/**
+ * Objects that describe one operation to be performed by the <code>PlanInterpreter</code>.
+ * Injection is achieved by executing the steps in order.
+ * <p>
+ * See <code>PlanInterpreter</code> for more details on the execution model.
+ */
+package org.elasticsearch.nalbind.injector.step;

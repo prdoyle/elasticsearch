@@ -2,7 +2,7 @@ package org.elasticsearch.example.module1;
 
 import org.elasticsearch.example.module1.api.Module1Listener;
 import org.elasticsearch.example.module1.api.Module1Service;
-import org.elasticsearch.injection.api.Inject;
+import org.elasticsearch.nalbind.api.Inject;
 
 import java.util.List;
 

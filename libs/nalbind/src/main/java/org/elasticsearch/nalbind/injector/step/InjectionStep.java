@@ -6,13 +6,10 @@
  * Side Public License, v 1.
  */
 
-apply plugin: 'elasticsearch.build'
-apply plugin: 'elasticsearch.publish'
+package org.elasticsearch.nalbind.injector.step;
 
-dependencies {
-  compileOnly project(':libs:elasticsearch-logging')
-
-  testImplementation(project(":test:framework")) {
-    exclude group: 'org.elasticsearch', module: 'elasticsearch-nalbind'
-  }
-}
+public sealed interface InjectionStep permits
+    InstanceSupplyingStep,
+    ListProxyCreateStep,
+    ListProxyResolveStep
+{ }

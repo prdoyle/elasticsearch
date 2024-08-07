@@ -6,13 +6,17 @@
  * Side Public License, v 1.
  */
 
-apply plugin: 'elasticsearch.build'
-apply plugin: 'elasticsearch.publish'
+package org.elasticsearch.nalbind.exceptions;
 
-dependencies {
-  compileOnly project(':libs:elasticsearch-logging')
+/**
+ *
+ */
+public class UnresolvedProxyException extends IllegalStateException {
+    public UnresolvedProxyException(String s) {
+        super(s);
+    }
 
-  testImplementation(project(":test:framework")) {
-    exclude group: 'org.elasticsearch', module: 'elasticsearch-nalbind'
-  }
+    public UnresolvedProxyException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

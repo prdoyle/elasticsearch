@@ -6,13 +6,8 @@
  * Side Public License, v 1.
  */
 
-apply plugin: 'elasticsearch.build'
-apply plugin: 'elasticsearch.publish'
+package org.elasticsearch.nalbind.injector.spec;
 
-dependencies {
-  compileOnly project(':libs:elasticsearch-logging')
-
-  testImplementation(project(":test:framework")) {
-    exclude group: 'org.elasticsearch', module: 'elasticsearch-nalbind'
-  }
+public sealed interface InjectionSpec permits AmbiguousSpec, UnambiguousSpec {
+    Class<?> requestedType();
 }
