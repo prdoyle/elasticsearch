@@ -19,6 +19,11 @@ import java.util.Set;
 public class InjectorTests extends ESTestCase {
 
     public void testInjectionOfRecordComponents() {
+        record First(){}
+        record Second(First first){}
+        record Third(First first, Second second){}
+        record ExistingInstances(First first, Second second){}
+
         var first = new First();
         var second = new Second(first);
         Injector injector = Injector.create(MethodHandles.lookup()).addRecordContents(new ExistingInstances(first, second));
@@ -26,11 +31,6 @@ public class InjectorTests extends ESTestCase {
         assertSame(first, third.first);
         assertSame(second, third.second);
     }
-
-    public record First(){}
-    public record Second(First first){}
-    public record Third(First first, Second second){}
-    public record ExistingInstances(First first, Second second){}
 
     public void testMultipleResultsMap() {
         Injector injector = Injector.create(MethodHandles.lookup()).addClasses(Service1.class, Component3.class);
@@ -49,6 +49,9 @@ public class InjectorTests extends ESTestCase {
      * the instance of that superclass takes precedence over any instances of any subclasses.
      */
     public void testOverrideAlias() {
+        class Superclass {}
+        class Subclass extends Superclass {}
+
         assertEquals(Superclass.class, Injector.create(MethodHandles.lookup())
             .addClasses(Superclass.class, Subclass.class) // Superclass first
             .inject(Superclass.class)
@@ -73,8 +76,11 @@ public class InjectorTests extends ESTestCase {
     }
 
     public void testBadUnknownType() {
-        // Injector knows only about Component4, discovers Listener, but can't find any subtypes
-        Injector injector = Injector.create(MethodHandles.lookup()).addClass(Component4.class);
+        interface Supertype{}
+        record Service(Supertype supertype) {}
+
+        // Injector knows only about Service, discovers Supertype, but can't find any subtypes
+        Injector injector = Injector.create(MethodHandles.lookup()).addClass(Service.class);
 
         assertThrows(IllegalStateException.class, injector::inject);
     }
@@ -117,8 +123,6 @@ public class InjectorTests extends ESTestCase {
 
     public record Component3(Service1 service1) {}
 
-    public record Component4(Listener listener) {}
-
     public record GoodService(List<Component1> components) { }
 
     public record BadService(List<Component1> components) {
@@ -136,10 +140,7 @@ public class InjectorTests extends ESTestCase {
 
     public record MultiService(List<Component1> component1s, List<Component2> component2s) { }
 
-    public record Circular1(Circular2 service2) {}
-    public record Circular2(Circular1 service2) {}
-
-    public static class Superclass {}
-    public static class Subclass extends Superclass {}
+    record Circular1(Circular2 service2) {}
+    record Circular2(Circular1 service2) {}
 
 }

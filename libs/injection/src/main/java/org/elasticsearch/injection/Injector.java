@@ -304,7 +304,7 @@ public final class Injector {
     }
 
     private static Constructor<?> getSuitableConstructorIfAny(Class<?> type) {
-        var constructors = Stream.of(type.getConstructors()).filter(not(Constructor::isSynthetic)).toList();
+        var constructors = Stream.of(type.getDeclaredConstructors()).filter(not(Constructor::isSynthetic)).toList();
         if (constructors.size() == 1) {
             return constructors.get(0);
         }
