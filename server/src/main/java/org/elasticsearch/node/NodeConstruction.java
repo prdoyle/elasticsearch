@@ -859,7 +859,7 @@ class NodeConstruction {
                 componentsFromInjector = Set.of();
             } else {
                 logger.info("NALBIND - doing component injection for " + plugin.getClass().getSimpleName());
-                var injector = org.elasticsearch.injection.Injector.create(MethodHandles.lookup());
+                var injector = org.elasticsearch.nalbind.injector.Injector.create(MethodHandles.lookup());
                 injector.addInstances(componentObjects);
                 injector.addRecordContents(pluginServices);
                 var resultMap = injector.inject(classes);

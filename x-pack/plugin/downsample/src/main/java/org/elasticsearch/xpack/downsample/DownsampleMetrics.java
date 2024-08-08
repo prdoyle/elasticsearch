@@ -8,7 +8,7 @@
 package org.elasticsearch.xpack.downsample;
 
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
-import org.elasticsearch.injection.api.Inject;
+import org.elasticsearch.nalbind.api.Inject;
 import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
