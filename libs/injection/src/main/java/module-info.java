@@ -1,4 +1,4 @@
-module org.elasticsearch.injection {
+module org.elasticsearch.nalbind {
     exports org.elasticsearch.injection.api;
     exports org.elasticsearch.injection.exceptions;
     exports org.elasticsearch.injection;
