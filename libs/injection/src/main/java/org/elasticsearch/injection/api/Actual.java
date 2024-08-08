@@ -1,4 +1,3 @@
-
 package org.elasticsearch.injection.api;
 
 import java.lang.annotation.Retention;
