@@ -859,7 +859,7 @@ class NodeConstruction {
                 componentsFromInjector = Set.of();
             } else {
                 logger.debug("Using injector to instantiate classes for {}: {}", plugin.getClass().getSimpleName(), classes);
-                var injector = org.elasticsearch.injection.Injector.create(MethodHandles.publicLookup());
+                var injector = org.elasticsearch.injection.Injector.create(MethodHandles.lookup());
                 injector.addInstances(componentObjects);
                 injector.addRecordContents(pluginServices);
                 var resultMap = injector.inject(classes);
