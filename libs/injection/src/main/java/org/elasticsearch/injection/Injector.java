@@ -256,7 +256,13 @@ public final class Injector {
                 try {
                     ctorHandle = lookup.unreflectConstructor(constructor);
                 } catch (IllegalAccessException e) {
-                    throw new InjectionConfigurationException(e);
+                    // Uh oh. Try setAccessible
+                    constructor.setAccessible(true);
+                    try {
+                        ctorHandle = lookup.unreflectConstructor(constructor);
+                    } catch (IllegalAccessException ex) {
+                        throw new InjectionConfigurationException(e);
+                    }
                 }
 
                 List<ParameterSpec> parameters = Stream.of(constructor.getParameters())
