@@ -8,8 +8,12 @@
 
 package org.elasticsearch.injection.step;
 
-public sealed interface InjectionStep permits
-    InstanceSupplyingStep,
-    ListProxyCreateStep,
-    ListProxyResolveStep
-{ }
+/**
+ * Creates a proxy for lists of the given type.
+ * Subsequent steps that inject such a list will receive the proxy
+ * unless it is resolved first via a {@link ListProxyResolveStep}.
+ * The proxy will throw exceptions if it is used before it is resolved.
+ */
+public record ListProxyCreateStep(
+    Class<?> elementType
+) implements InjectionStep { }

@@ -8,6 +8,8 @@
 
 package org.elasticsearch.injection;
 
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.injection.exceptions.InjectionConfigurationException;
 import org.elasticsearch.injection.exceptions.InjectionExecutionException;
 import org.elasticsearch.injection.exceptions.UnresolvedProxyException;
@@ -15,9 +17,9 @@ import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.injection.step.InstantiateStep;
+import org.elasticsearch.injection.step.ListProxyCreateStep;
+import org.elasticsearch.injection.step.ListProxyResolveStep;
 import org.elasticsearch.injection.step.RollUpStep;
-import org.elasticsearch.logging.LogManager;
-import org.elasticsearch.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,6 +29,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Collections.emptyList;
+import static org.elasticsearch.injection.spec.InjectionModifiers.LIST;
 
 /**
  * Performs the actual injection operations by running the {@link InjectionStep}s.
@@ -44,12 +47,16 @@ import static java.util.Collections.emptyList;
  * {@link Injector#addInstance(Class, Object) Injector.addInstance},
  * and then the steps begin to execute, reading and writing from this map.
  * Some steps create objects and add them to this map; others manipulate the map itself.
+ * In addition to the map of instances, there is also a {@link ProxyPool} used to manage
+ * list proxies; some steps create, use, or resolve proxies via the pool.
  */
 final class PlanInterpreter {
     private final Map<Class<?>, List<Object>> instances = new LinkedHashMap<>();
+    private final ProxyPool proxyPool;
 
-    PlanInterpreter(Map<Class<?>, Object> existingInstances) {
+    PlanInterpreter(Map<Class<?>, Object> existingInstances, ProxyPool proxyPool) {
         existingInstances.forEach(this::addInstance);
+        this.proxyPool = proxyPool;
     }
 
     /**
@@ -68,6 +75,13 @@ final class PlanInterpreter {
                 var subtype = r.subtype();
                 LOGGER.trace("Rolling up {} into {}", subtype.getSimpleName(), requestedType.getSimpleName());
                 addInstances(requestedType, instances.getOrDefault(subtype, emptyList()));
+            } else if (step instanceof ListProxyCreateStep s) {
+                if (proxyPool.putNewListProxy(s.elementType()) != null) {
+                    throw new InjectionExecutionException("Two proxies for " + s.elementType());
+                }
+            } else if (step instanceof ListProxyResolveStep s) {
+                Class<?> elementType = s.elementType();
+                proxyPool.resolveListProxy(elementType, this.instances.getOrDefault(elementType, emptyList()));
             } else {
                 // TODO: switch patterns would make this unnecessary
                 throw new InjectionExecutionException("Unexpected step type: " + step.getClass().getSimpleName());
@@ -132,7 +146,11 @@ final class PlanInterpreter {
     }
 
     private Object parameterValue(ParameterSpec parameterSpec) {
-        return theOnlyInstance(parameterSpec.formalType());
+        if (parameterSpec.modifiers().contains(LIST)) {
+            return proxyPool.theProxyFor(parameterSpec.injectableType());
+        } else {
+            return theOnlyInstance(parameterSpec.formalType());
+        }
     }
 
     private static final Logger LOGGER = LogManager.getLogger(PlanInterpreter.class);

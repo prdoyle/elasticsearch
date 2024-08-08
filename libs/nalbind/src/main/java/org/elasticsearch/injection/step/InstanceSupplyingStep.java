@@ -11,6 +11,10 @@ package org.elasticsearch.injection.step;
 /**
  * An {@link InjectionStep} that causes an object to be available
  * for subsequent steps to look up by a particular requested type.
+ * <p>
+ * There is no requirement that the object in question be the only one associated
+ * with the given type; however, it is invalid to request injection of an object
+ * using a type that has more than one object associated with it.
  */
 public sealed interface InstanceSupplyingStep extends InjectionStep permits
     InstantiateStep,

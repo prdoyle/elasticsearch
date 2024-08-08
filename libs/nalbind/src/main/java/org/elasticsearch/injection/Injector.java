@@ -1,19 +1,20 @@
 
 package org.elasticsearch.injection;
 
-import org.elasticsearch.injection.api.Inject;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.injection.exceptions.CyclicDependencyException;
+import org.elasticsearch.injection.api.Inject;
 import org.elasticsearch.injection.exceptions.InjectionConfigurationException;
 import org.elasticsearch.injection.spec.AliasSpec;
 import org.elasticsearch.injection.spec.AmbiguousSpec;
 import org.elasticsearch.injection.spec.ExistingInstanceSpec;
+import org.elasticsearch.injection.spec.InjectionModifiers;
 import org.elasticsearch.injection.spec.InjectionSpec;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
 import org.elasticsearch.injection.spec.UnambiguousSpec;
 import org.elasticsearch.injection.step.InjectionStep;
-import org.elasticsearch.logging.LogManager;
-import org.elasticsearch.logging.Logger;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -42,12 +43,13 @@ import static java.util.stream.Collectors.toMap;
  * Allows the user to specify the requirements, then call {@link #inject} to create an object plus all its dependencies.
  * <p>
  * <em>Implementation note</em>: this class itself contains logic for <em>specifying</em> the injection requirements;
- * the actual injection operations are performed in other classes like {@link Planner} and {@link PlanInterpreter},
+ * the actual injection operations are performed in other classes like {@link Planner}, {@link PlanInterpreter}, and {@link ProxyPool}.
  */
 public final class Injector {
     private final Set<Class<?>> classesToInstantiate;
     private final Map<Class<?>, Object> existingInstances;
     private final MethodHandles.Lookup lookup;
+    private final ProxyPool proxyPool = new ProxyPool();
 
     Injector(Collection<Class<?>> classesToInstantiate, Map<Class<?>, Object> existingInstances, MethodHandles.Lookup lookup) {
         this.classesToInstantiate = new LinkedHashSet<>(classesToInstantiate);
@@ -190,7 +192,7 @@ public final class Injector {
     private PlanInterpreter doInjection() {
         LOGGER.debug("Starting injection");
         Map<Class<?>, InjectionSpec> specMap = specMap(existingInstances, classesToInstantiate, lookup);
-        PlanInterpreter interpreter = new PlanInterpreter(existingInstances);
+        PlanInterpreter interpreter = new PlanInterpreter(existingInstances, proxyPool);
         interpreter.executePlan(injectionPlan(classesToInstantiate, specMap));
         LOGGER.debug("Done injection");
         return interpreter;
@@ -300,7 +302,7 @@ public final class Injector {
      * pretend there's some massive method taking all of them as parameters
      */
     private static ParameterSpec syntheticParameterSpec(Class<?> c) {
-        return new ParameterSpec("synthetic_" + c.getSimpleName(), c, c);
+        return new ParameterSpec("synthetic_" + c.getSimpleName(), c, c, InjectionModifiers.NONE);
     }
 
     private static Constructor<?> getSuitableConstructorIfAny(Class<?> type) {

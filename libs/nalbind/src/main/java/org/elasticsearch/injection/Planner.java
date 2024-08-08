@@ -8,6 +8,8 @@
 
 package org.elasticsearch.injection;
 
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.injection.exceptions.InjectionConfigurationException;
 import org.elasticsearch.injection.spec.AliasSpec;
 import org.elasticsearch.injection.spec.AmbiguousSpec;
@@ -16,14 +18,15 @@ import org.elasticsearch.injection.spec.InjectionSpec;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.injection.step.InstantiateStep;
+import org.elasticsearch.injection.step.ListProxyCreateStep;
+import org.elasticsearch.injection.step.ListProxyResolveStep;
 import org.elasticsearch.injection.step.RollUpStep;
-import org.elasticsearch.logging.LogManager;
-import org.elasticsearch.logging.Logger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -31,6 +34,7 @@ import java.util.Set;
 
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
+import static org.elasticsearch.injection.spec.InjectionModifiers.LIST;
 
 /**
  * <em>Evolution note</em>: the intent is to plan one domain/subsystem at a time.
@@ -83,7 +87,25 @@ final class Planner {
         while ((c = queue.poll()) != null) {
             planForClass(c, 0);
         }
+        planProxyResolution(unresolvedProxies());
         return plan;
+    }
+
+    /**
+     * An analysis that scans the current plan and finds proxies that are created but never resolved.
+     *
+     * @return the element types for list proxies that aren't resolved in the current plan
+     */
+    private Collection<Class<?>> unresolvedProxies() {
+        Set<Class<?>> result = new LinkedHashSet<>();
+        for (InjectionStep step : plan) {
+            if (step instanceof ListProxyCreateStep s) {
+                result.add(s.elementType());
+            } else if (step instanceof ListProxyResolveStep s) {
+                result.remove(s.elementType());
+            }
+        }
+        return result;
     }
 
     private void planProxyResolution(Collection<Class<?>> proxiesToResolve) {
@@ -125,8 +147,19 @@ final class Planner {
 
         if (spec instanceof MethodHandleSpec m) {
             for (var p : m.parameters()) {
-                LOGGER.trace("{}- Recursing into {} for actual parameter {}", indent, p.injectableType(), p);
-                planForClass(p.injectableType(), depth + 1);
+                if (p.canBeProxied()) {
+                    if (alreadyProxied.add(p.injectableType())) {
+                        addStep(new ListProxyCreateStep(p.injectableType()), indent);
+                    } else {
+                        LOGGER.trace("{}- Use existing proxy for {}", indent, p);
+                    }
+                } else {
+                    LOGGER.trace("{}- Recursing into {} for actual parameter {}", indent, p.injectableType(), p);
+                    planForClass(p.injectableType(), depth + 1);
+                    if (p.modifiers().contains(LIST)) {
+                        rollUpAndResolveListProxy(p.injectableType(), depth, indent);
+                    }
+                }
             }
             addStep(new InstantiateStep(m), indent);
         } else if (spec instanceof AliasSpec a) {
@@ -168,6 +201,7 @@ final class Planner {
     private void rollUpAndResolveListProxy(Class<?> elementType, int depth, String indent) {
         LOGGER.trace("{}- Roll up and resolve {}", indent, elementType);
         planForClass(elementType, depth + 1);
+        addStep(new ListProxyResolveStep(elementType), indent);
     }
 
     private static final Logger LOGGER = LogManager.getLogger(Planner.class);
