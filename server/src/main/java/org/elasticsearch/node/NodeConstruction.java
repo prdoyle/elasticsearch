@@ -858,7 +858,7 @@ class NodeConstruction {
             if (classes.isEmpty()) {
                 componentsFromInjector = Set.of();
             } else {
-                logger.debug("Using injector to instantiate classes for {}: {}", plugin.getClass().getSimpleName(), classes);
+                logger.info("NALBIND - doing component injection for " + plugin.getClass().getSimpleName());
                 var injector = org.elasticsearch.injection.Injector.create(MethodHandles.lookup());
                 injector.addInstances(componentObjects);
                 injector.addRecordContents(pluginServices);
