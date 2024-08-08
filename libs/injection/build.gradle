@@ -14,5 +14,6 @@ dependencies {
 
   testImplementation(project(":test:framework")) {
     exclude group: 'org.elasticsearch', module: 'elasticsearch-injection'
+    exclude group: 'org.elasticsearch', module: 'elasticsearch-nalbind'
   }
 }
