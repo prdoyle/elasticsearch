@@ -210,6 +210,7 @@ import org.elasticsearch.xcontent.NamedXContentRegistry;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -858,7 +859,7 @@ class NodeConstruction {
                 componentsFromInjector = Set.of();
             } else {
                 logger.debug("Using injector to instantiate classes for {}: {}", plugin.getClass().getSimpleName(), classes);
-                var injector = org.elasticsearch.injection.Injector.create();
+                var injector = org.elasticsearch.injection.Injector.create(MethodHandles.publicLookup());
                 injector.addInstances(componentObjects);
                 injector.addRecordContents(pluginServices);
                 var resultMap = injector.inject(classes);

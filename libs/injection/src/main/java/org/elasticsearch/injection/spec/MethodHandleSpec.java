@@ -23,7 +23,7 @@ public record MethodHandleSpec(
     Class<?> requestedType,
     MethodHandle methodHandle,
     List<ParameterSpec> parameters
-) implements SeedSpec {
+) implements UnambiguousSpec {
     public MethodHandleSpec {
         assert Objects.equals(
             methodHandle.type().parameterList(),
