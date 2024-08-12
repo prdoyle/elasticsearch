@@ -8,9 +8,6 @@
 
 package org.elasticsearch.injection.exceptions;
 
-/**
- *
- */
 public class UnresolvedProxyException extends IllegalStateException {
     public UnresolvedProxyException(String s) {
         super(s);
