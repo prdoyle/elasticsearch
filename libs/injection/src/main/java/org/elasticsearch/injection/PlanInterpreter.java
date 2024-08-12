@@ -10,6 +10,7 @@ package org.elasticsearch.injection;
 
 import org.elasticsearch.injection.exceptions.InjectionConfigurationException;
 import org.elasticsearch.injection.exceptions.InjectionExecutionException;
+import org.elasticsearch.injection.exceptions.UnresolvedProxyException;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
 import org.elasticsearch.injection.step.InjectionStep;
@@ -121,6 +122,10 @@ final class PlanInterpreter {
         Object[] args = spec.parameters().stream().map(this::parameterValue).toArray();
         try {
             return spec.methodHandle().invokeWithArguments(args);
+        } catch (UnresolvedProxyException e) {
+            // This exception is descriptive enough already. Catching it and wrapping it here
+            // only makes the stack trace a little more complex for no benefit.
+            throw e;
         } catch (Throwable e) {
             throw new IllegalStateException("Unexpected exception while instantiating {}" + spec, e);
         }

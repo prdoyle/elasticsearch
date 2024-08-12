@@ -22,6 +22,7 @@ import org.elasticsearch.logging.Logger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +84,11 @@ final class Planner {
             planForClass(c, 0);
         }
         return plan;
+    }
+
+    private void planProxyResolution(Collection<Class<?>> proxiesToResolve) {
+        LOGGER.trace("Resolving {} remaining proxies", proxiesToResolve.size());
+        proxiesToResolve.forEach(elementType -> rollUpAndResolveListProxy(elementType, 0, ""));
     }
 
     /**
@@ -160,6 +166,11 @@ final class Planner {
     private void addStep(InjectionStep newStep, String indent) {
         LOGGER.trace("{}- Add step {}", indent, newStep);
         plan.add(newStep);
+    }
+
+    private void rollUpAndResolveListProxy(Class<?> elementType, int depth, String indent) {
+        LOGGER.trace("{}- Roll up and resolve {}", indent, elementType);
+        planForClass(elementType, depth + 1);
     }
 
     private static final Logger LOGGER = LogManager.getLogger(Planner.class);
