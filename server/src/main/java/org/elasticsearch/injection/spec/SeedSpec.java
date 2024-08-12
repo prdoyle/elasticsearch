@@ -8,4 +8,10 @@
 
 package org.elasticsearch.injection.spec;
 
-public sealed interface UnambiguousSpec extends InjectionSpec permits SeedSpec, AliasSpec {}
+/**
+ * An {@link InjectionSpec} that can represent a requirement that came directly from the user,
+ * as opposed to one that was inferred automatically by the injector
+ * (though these can <em>also</em> be inferred by the injector).
+ */
+public sealed interface SeedSpec extends UnambiguousSpec permits ExistingInstanceSpec, MethodHandleSpec {
+}

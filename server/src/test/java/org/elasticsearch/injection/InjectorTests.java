@@ -21,7 +21,7 @@ public class InjectorTests extends ESTestCase {
     public void testInjectionOfRecordComponents() {
         var first = new First();
         var second = new Second(first);
-        Injector injector = Injector.create(MethodHandles.lookup()).addRecordContents(new ExistingInstances(first, second));
+        Injector injector = Injector.create().addRecordContents(new ExistingInstances(first, second));
         Third third = injector.inject(Third.class);
         assertSame(first, third.first);
         assertSame(second, third.second);
@@ -33,7 +33,7 @@ public class InjectorTests extends ESTestCase {
     public record ExistingInstances(First first, Second second){}
 
     public void testMultipleResultsMap() {
-        Injector injector = Injector.create(MethodHandles.lookup()).addClasses(Service1.class, Component3.class);
+        Injector injector = Injector.create().addClasses(Service1.class, Component3.class);
         var resultMap = injector.inject(List.of(Service1.class, Component3.class));
         assertEquals(Set.of(Service1.class, Component3.class), resultMap.keySet());
         assertEquals(1, resultMap.get(Service1.class).size());
@@ -49,15 +49,18 @@ public class InjectorTests extends ESTestCase {
      * the instance of that superclass takes precedence over any instances of any subclasses.
      */
     public void testOverrideAlias() {
-        assertEquals(Superclass.class, Injector.create(MethodHandles.lookup())
+        MethodHandles.lookup();
+        assertEquals(Superclass.class, Injector.create()
             .addClasses(Superclass.class, Subclass.class) // Superclass first
             .inject(Superclass.class)
             .getClass());
-        assertEquals(Superclass.class, Injector.create(MethodHandles.lookup())
+        MethodHandles.lookup();
+        assertEquals(Superclass.class, Injector.create()
             .addClasses(Subclass.class, Superclass.class) // Subclass first
             .inject(Superclass.class)
             .getClass());
-        assertEquals(Superclass.class, Injector.create(MethodHandles.lookup())
+        MethodHandles.lookup();
+        assertEquals(Superclass.class, Injector.create()
             .addClasses(Subclass.class)
             .inject(Superclass.class) // Superclass is not mentioned until here
             .getClass());
@@ -69,19 +72,24 @@ public class InjectorTests extends ESTestCase {
 
     public void testBadInterfaceClass() {
         assertThrows(InjectionConfigurationException.class, () ->
-            Injector.create(MethodHandles.lookup()).addClass(Listener.class).inject());
+        {
+            MethodHandles.lookup();
+            Injector.create().addClass(Listener.class).inject();
+        });
     }
 
     public void testBadUnknownType() {
         // Injector knows only about Component4, discovers Listener, but can't find any subtypes
-        Injector injector = Injector.create(MethodHandles.lookup()).addClass(Component4.class);
+        MethodHandles.lookup();
+        Injector injector = Injector.create().addClass(Component4.class);
 
         assertThrows(IllegalStateException.class, injector::inject);
     }
 
     public void testBadCircularDependency() {
         assertThrows(InjectionConfigurationException.class, () -> {
-            Injector.create(MethodHandles.lookup()).addClasses(Circular1.class, Circular2.class).inject();
+            MethodHandles.lookup();
+            Injector.create().addClasses(Circular1.class, Circular2.class).inject();
         });
     }
 
@@ -92,7 +100,8 @@ public class InjectorTests extends ESTestCase {
     public void testBadCircularDependencyViaParameter() {
         record UsesCircular1(Circular1 circular1){}
         assertThrows(InjectionConfigurationException.class, () -> {
-            Injector.create(MethodHandles.lookup()).addClass(UsesCircular1.class).inject();
+            MethodHandles.lookup();
+            Injector.create().addClass(UsesCircular1.class).inject();
         });
     }
 
@@ -101,7 +110,8 @@ public class InjectorTests extends ESTestCase {
         record Service2(Service1 service1){}
         record Service3(Service2 service2) implements Service1 {}
         assertThrows(InjectionConfigurationException.class, () -> {
-            Injector.create(MethodHandles.lookup()).addClasses(Service2.class, Service3.class).inject();
+            MethodHandles.lookup();
+            Injector.create().addClasses(Service2.class, Service3.class).inject();
         });
     }
 

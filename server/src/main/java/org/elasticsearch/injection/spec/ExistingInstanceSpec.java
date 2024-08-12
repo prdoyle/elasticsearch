@@ -9,7 +9,7 @@
 package org.elasticsearch.injection.spec;
 
 public record ExistingInstanceSpec(Class<?> requestedType, Object instance)
-    implements UnambiguousSpec {
+    implements SeedSpec {
     @Override
     public String toString() {
         // Don't call instance.toString; who knows what that will return

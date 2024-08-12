@@ -114,6 +114,7 @@ final class Planner {
 
         LOGGER.trace("{}Planning for {}", indent, spec);
         if (startedPlanning.add(spec) == false) {
+            // TODO: Better cycle detection and reporting. Use SCCs
             throw new InjectionConfigurationException("Cyclic dependency involving " + spec);
         }
 
@@ -149,6 +150,8 @@ final class Planner {
                 LOGGER.trace("{}- Processing candidates for {}", indent, a.requestedType());
                 a.candidates().forEach(candidate -> planForSpec(candidate, depth + 1));
             }
+        } else {
+            throw new AssertionError("Unexpected injection spec: " + spec);
         }
 
         finishedPlanning.add(spec);

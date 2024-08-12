@@ -9,7 +9,6 @@
 package org.elasticsearch.injection;
 
 import org.elasticsearch.injection.api.Inject;
-import org.elasticsearch.injection.exceptions.CyclicDependencyException;
 import org.elasticsearch.injection.exceptions.InjectionConfigurationException;
 import org.elasticsearch.injection.spec.AliasSpec;
 import org.elasticsearch.injection.spec.AmbiguousSpec;
@@ -17,6 +16,7 @@ import org.elasticsearch.injection.spec.ExistingInstanceSpec;
 import org.elasticsearch.injection.spec.InjectionSpec;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
+import org.elasticsearch.injection.spec.SeedSpec;
 import org.elasticsearch.injection.spec.UnambiguousSpec;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.logging.LogManager;
@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -52,18 +51,17 @@ import static java.util.stream.Collectors.toMap;
  * the actual injection operations are performed in other classes like {@link Planner} and {@link PlanInterpreter},
  */
 public final class Injector {
-    private final Set<Class<?>> classesToInstantiate;
-    private final Map<Class<?>, Object> existingInstances;
-    private final MethodHandles.Lookup lookup;
+    /**
+     * The specifications supplied by the user, as opposed to those inferred by the injector.
+     */
+    private final Map<Class<?>, SeedSpec> seedSpecs;
 
-    Injector(Collection<Class<?>> classesToInstantiate, Map<Class<?>, Object> existingInstances, MethodHandles.Lookup lookup) {
-        this.classesToInstantiate = new LinkedHashSet<>(classesToInstantiate);
-        this.existingInstances = existingInstances;
-        this.lookup = lookup;
+    Injector(Map<Class<?>, SeedSpec> seedSpecs) {
+        this.seedSpecs = seedSpecs;
     }
 
-    public static Injector create(MethodHandles.Lookup lookup) {
-        return new Injector(new LinkedHashSet<>(), new LinkedHashMap<>(), lookup);
+    public static Injector create() {
+        return new Injector(new LinkedHashMap<>());
     }
 
     /**
@@ -87,7 +85,11 @@ public final class Injector {
      * @return <code>this</code>
      */
     public Injector addClass(Class<?> classToProcess) {
-        this.classesToInstantiate.add(classToProcess);
+        MethodHandleSpec methodHandleSpec = methodHandleSpecFor(classToProcess);
+        var existing = seedSpecs.put(classToProcess, methodHandleSpec);
+        if (existing != null) {
+            throw new IllegalArgumentException("class " + classToProcess.getSimpleName() + "has already been added");
+        }
         return this;
     }
 
@@ -102,7 +104,7 @@ public final class Injector {
      * Equivalent to multiple chained calls to {@link #addClass}.
      */
     public Injector addClasses(Collection<Class<?>> classesToProcess) {
-        this.classesToInstantiate.addAll(classesToProcess);
+        classesToProcess.forEach(this::addClass);
         return this;
     }
 
@@ -140,7 +142,7 @@ public final class Injector {
      * The given object is treated as though it had been instantiated by the injector.
      */
     public <T> Injector addInstance(Class<? super T> type, T object) {
-        Object existing = this.existingInstances.put(type, object);
+        var existing = seedSpecs.put(type, new ExistingInstanceSpec(type, object));
         if (existing != null) {
             throw new IllegalStateException("There's already an object for " + type);
         }
@@ -156,7 +158,7 @@ public final class Injector {
             try {
                 @SuppressWarnings("unchecked")
                 Class<T> type = (Class<T>) c.getType();
-                addInstance(type, type.cast(lookup.unreflect(c.getAccessor()).invoke(r)));
+                addInstance(type, type.cast(lookup().unreflect(c.getAccessor()).invoke(r)));
             } catch (Throwable e) {
                 throw new InjectionConfigurationException("Unable to read record component " + c, e);
             }
@@ -189,16 +191,22 @@ public final class Injector {
     }
 
     private <T> void ensureClassIsSpecified(Class<T> resultType) {
-        if (false == (existingInstances.containsKey(resultType) || classesToInstantiate.contains(resultType))) {
-            classesToInstantiate.add(resultType);
+        if (seedSpecs.containsKey(resultType) == false) {
+            addClass(resultType);
         }
     }
 
     private PlanInterpreter doInjection() {
         LOGGER.debug("Starting injection");
-        Map<Class<?>, InjectionSpec> specMap = specMap(existingInstances, classesToInstantiate, lookup);
+        Map<Class<?>, InjectionSpec> specMap = specClosure(seedSpecs);
+        Map<Class<?>, Object> existingInstances = new LinkedHashMap<>();
+        specMap.values().forEach((spec) -> {
+            if (spec instanceof ExistingInstanceSpec e) {
+                existingInstances.put(e.requestedType(), e.instance());
+            }
+        });
         PlanInterpreter interpreter = new PlanInterpreter(existingInstances);
-        interpreter.executePlan(injectionPlan(classesToInstantiate, specMap));
+        interpreter.executePlan(injectionPlan(seedSpecs.keySet(), specMap));
         LOGGER.debug("Done injection");
         return interpreter;
     }
@@ -210,90 +218,102 @@ public final class Injector {
      * so that we can easily build the complete picture of how injection should occur.
      * <p>
      * This is not part of the planning process; it's just discovering all the things
-     * the injector needs to know about. This logic isn't concerned with ordering, though it can detect dependency cycles.
+     * the injector needs to know about. This logic isn't concerned with ordering or dependency cycles.
      *
+     * @param seedMap the injections the user explicitly asked for
      * @return an {@link InjectionSpec} for every class the injector is capable of injecting.
-     *
-     * @param lookup is used to find {@link MethodHandle}s for constructors.
      */
-    private static Map<Class<?>, InjectionSpec> specMap(
-        Map<Class<?>, Object> existingInstances,
-        Set<Class<?>> classesToInstantiate,
-        MethodHandles.Lookup lookup
-    ) {
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Classes to instantiate: {}", classesToInstantiate.stream().map(Class::getSimpleName).toList());
-        }
+    private static Map<Class<?>, InjectionSpec> specClosure(Map<Class<?>, SeedSpec> seedMap) {
+        assertSeedMapIsValid(seedMap);
 
-        Queue<ParameterSpec> queue = classesToInstantiate.stream()
+        // For convenience, we pretend there's a gigantic method out there that takes
+        // all the seed types as parameters.
+        Queue<ParameterSpec> queue = seedMap.values().stream()
+            .map(InjectionSpec::requestedType)
             .map(Injector::syntheticParameterSpec)
             .collect(toCollection(ArrayDeque::new));
-        Map<Class<?>, InjectionSpec> specsByClass = new LinkedHashMap<>();
-        existingInstances.forEach((type, obj) -> {
-            registerSpec(new ExistingInstanceSpec(type, obj), specsByClass);
-            aliasSuperinterfaces(type, type, specsByClass);
-        });
-        Set<Class<?>> checklist = new HashSet<>();
+
+        // This map doubles as a checklist of classes we're already finished processing
+        Map<Class<?>, InjectionSpec> result = new LinkedHashMap<>();
 
         ParameterSpec p;
         while ((p = queue.poll()) != null) {
             Class<?> c = p.injectableType();
-            InjectionSpec existingResult = specsByClass.get(c);
+            InjectionSpec existingResult = result.get(c);
             if (existingResult != null) {
                 LOGGER.trace("Spec for {} already exists", c.getSimpleName());
                 continue;
             }
 
-            // At this point, we know we'll need to create a MethodHandleSpec
+            SeedSpec spec = seedMap.get(c);
+            if (spec instanceof ExistingInstanceSpec) {
+                // simple!
+                result.put(c, spec);
+                continue;
+            }
 
-            if (checklist.add(c)) {
-                Constructor<?> constructor = getSuitableConstructorIfAny(c);
-                if (constructor == null) {
-                    throw new InjectionConfigurationException("No suitable constructor for " + c);
-                }
-
-                LOGGER.trace("Inspecting parameters for constructor: {}", constructor);
-                for (var parameter: constructor.getParameters()) {
-                    ParameterSpec ps = ParameterSpec.from(parameter);
-                    LOGGER.trace("Enqueue {}", parameter);
-                    queue.add(ps);
-                }
-
-                MethodHandle ctorHandle;
-                try {
-                    ctorHandle = lookup.unreflectConstructor(constructor);
-                } catch (IllegalAccessException e) {
-                    throw new InjectionConfigurationException(e);
-                }
-
-                List<ParameterSpec> parameters = Stream.of(constructor.getParameters())
-                    .map(ParameterSpec::from)
-                    .toList();
-
-                registerSpec(
-                    new MethodHandleSpec(constructor.getDeclaringClass(), ctorHandle, parameters),
-                    specsByClass
-                );
-                aliasSuperinterfaces(c, c, specsByClass);
-                for (Class<?> superclass = c.getSuperclass(); superclass != Object.class; superclass = superclass.getSuperclass()) {
-                    if (Modifier.isAbstract(superclass.getModifiers())) {
-                        registerSpec(new AliasSpec(superclass, c), specsByClass);
-                    } else {
-                        LOGGER.trace("Not aliasing {} to concrete superclass {}", c.getSimpleName(), superclass.getSimpleName());
-                    }
-                    aliasSuperinterfaces(superclass, c, specsByClass);
-                }
+            // At this point, we know we'll need a MethodHandleSpec
+            MethodHandleSpec methodHandleSpec;
+            if (spec == null) {
+                // The user didn't specify this class; we must infer it now
+                spec = methodHandleSpec = methodHandleSpecFor(c);
+            } else if (spec instanceof MethodHandleSpec m) {
+                methodHandleSpec = m;
             } else {
-                throw new CyclicDependencyException("Cycle detected");
+                throw new AssertionError("Unexpected spec: " + spec);
+            }
+
+            LOGGER.trace("Inspecting parameters for constructor of {}", c);
+            for (var ps: methodHandleSpec.parameters()) {
+                LOGGER.trace("Enqueue {}", ps);
+                queue.add(ps);
+            }
+
+            registerSpec(spec, result);
+            aliasSuperinterfaces(c, c, result);
+            for (Class<?> superclass = c.getSuperclass(); superclass != Object.class; superclass = superclass.getSuperclass()) {
+                if (Modifier.isAbstract(superclass.getModifiers())) {
+                    registerSpec(new AliasSpec(superclass, c), result);
+                } else {
+                    LOGGER.trace("Not aliasing {} to concrete superclass {}", c.getSimpleName(), superclass.getSimpleName());
+                }
+                aliasSuperinterfaces(superclass, c, result);
             }
         }
+
         if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("Specs: {}", specsByClass.values().stream()
+            LOGGER.trace("Specs: {}", result.values().stream()
                 .filter(s -> s instanceof UnambiguousSpec)
                 .map(Object::toString)
                 .collect(joining("\n\t", "\n\t", "")));
         }
-        return specsByClass;
+        return result;
+    }
+
+    private static MethodHandleSpec methodHandleSpecFor(Class<?> c) {
+        Constructor<?> constructor = getSuitableConstructorIfAny(c);
+        if (constructor == null) {
+            throw new InjectionConfigurationException("No suitable constructor for " + c);
+        }
+
+        MethodHandle ctorHandle;
+        try {
+            ctorHandle = lookup().unreflectConstructor(constructor);
+        } catch (IllegalAccessException e) {
+            throw new InjectionConfigurationException(e);
+        }
+
+        List<ParameterSpec> parameters = Stream.of(constructor.getParameters())
+            .map(ParameterSpec::from)
+            .toList();
+
+        return new MethodHandleSpec(c, ctorHandle, parameters);
+    }
+
+    private static void assertSeedMapIsValid(Map<Class<?>, SeedSpec> seed) {
+        seed.forEach((c, s) -> {
+            assert s.requestedType().equals(c): "Spec must be associated with its requestedType, not " + c + ": " + s;
+        });
     }
 
     /**
@@ -344,7 +364,6 @@ public final class Injector {
     }
 
     private List<InjectionStep> injectionPlan(Set<Class<?>> requiredClasses, Map<Class<?>, InjectionSpec> specsByClass) {
-        // TODO: Cycle detection and reporting. Use SCCs
         LOGGER.trace("Constructing instantiation plan");
         Set<Class<?>> allParameterTypes = new HashSet<>();
         specsByClass.values().forEach(spec -> {
@@ -360,6 +379,15 @@ public final class Injector {
             LOGGER.debug("Injection plan: {}", plan.stream().map(Object::toString).collect(joining("\n\t", "\n\t", "")));
         }
         return plan;
+    }
+
+    /**
+     * <em>Evolution note</em>: there may be cases in the where we allow the user to
+     * supply a {@link java.lang.invoke.MethodHandles.Lookup} for convenience,
+     * so that they aren't required to make things public just to participate in injection.
+     */
+    private static MethodHandles.Lookup lookup() {
+        return MethodHandles.publicLookup();
     }
 
     private static final Logger LOGGER = LogManager.getLogger(Injector.class);
