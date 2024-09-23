@@ -7,6 +7,19 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-package org.elasticsearch.injection.step;
+package org.elasticsearch.injection.spec;
 
-public sealed interface InjectionStep permits CreateCollectionProxyStep, CreateInstanceProxyStep, InstantiateStep, ResolveCollectionProxyStep, ResolveInstanceProxyStep, RollupStep {}
+import java.util.Collection;
+
+public enum ParameterModifier {
+    /**
+     * The object being injected is a {@link Collection} of the injectable type,
+     * rather than an individual instance.
+     */
+    COLLECTION,
+
+    /**
+     * The object can be a proxy because its methods won't be called.
+     */
+    CAN_BE_PROXIED,
+}

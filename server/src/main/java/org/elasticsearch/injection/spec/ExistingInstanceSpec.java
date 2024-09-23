@@ -9,7 +9,10 @@
 
 package org.elasticsearch.injection.spec;
 
-public record ExistingInstanceSpec(Class<?> requestedType, Object instance) implements InjectionSpec {
+/**
+ * Indicates that a type should be injected by passing a particular {@link #instance}.
+ */
+public record ExistingInstanceSpec(Class<?> requestedType, Object instance) implements UnambiguousSpec {
     @Override
     public String toString() {
         // Don't call instance.toString; who knows what that will return

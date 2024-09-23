@@ -10,10 +10,14 @@
 package org.elasticsearch.injection;
 
 import org.elasticsearch.injection.api.Inject;
+import org.elasticsearch.injection.spec.AmbiguousSpec;
 import org.elasticsearch.injection.spec.ExistingInstanceSpec;
 import org.elasticsearch.injection.spec.InjectionSpec;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
+import org.elasticsearch.injection.spec.ParameterModifier;
 import org.elasticsearch.injection.spec.ParameterSpec;
+import org.elasticsearch.injection.spec.SubtypeSpec;
+import org.elasticsearch.injection.spec.UnambiguousSpec;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -21,9 +25,10 @@ import org.elasticsearch.logging.Logger;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,9 +55,9 @@ public final class Injector {
     /**
      * The specifications supplied by the user, as opposed to those inferred by the injector.
      */
-    private final Map<Class<?>, InjectionSpec> seedSpecs;
+    private final Map<Class<?>, UnambiguousSpec> seedSpecs;
 
-    Injector(Map<Class<?>, InjectionSpec> seedSpecs) {
+    Injector(Map<Class<?>, UnambiguousSpec> seedSpecs) {
         this.seedSpecs = seedSpecs;
     }
 
@@ -154,7 +159,7 @@ public final class Injector {
                 existingInstances.put(e.requestedType(), e.instance());
             }
         });
-        PlanInterpreter interpreter = new PlanInterpreter(existingInstances);
+        PlanInterpreter interpreter = new PlanInterpreter(existingInstances, new ProxyPool());
         interpreter.executePlan(injectionPlan(seedSpecs.keySet(), specMap));
         logger.debug("Done injection");
         return interpreter;
@@ -172,7 +177,7 @@ public final class Injector {
      * @param seedMap the injections the user explicitly asked for
      * @return an {@link InjectionSpec} for every class the injector is capable of injecting.
      */
-    private static Map<Class<?>, InjectionSpec> specClosure(Map<Class<?>, InjectionSpec> seedMap) {
+    private static Map<Class<?>, InjectionSpec> specClosure(Map<Class<?>, UnambiguousSpec> seedMap) {
         assert seedMapIsValid(seedMap);
 
         // For convenience, we pretend there's a gigantic method out there that takes
@@ -220,6 +225,7 @@ public final class Injector {
             }
 
             registerSpec(spec, result);
+            registerSupertypes(c, result);
         }
 
         if (logger.isTraceEnabled()) {
@@ -228,28 +234,42 @@ public final class Injector {
         return result;
     }
 
+    private static void registerSupertypes(Class<?> subtype, Map<Class<?>, InjectionSpec> specsByClass) {
+        registerSuperinterfaces(subtype, subtype, specsByClass);
+        for (Class<?> superclass = subtype.getSuperclass(); superclass != Object.class; superclass = superclass.getSuperclass()) {
+            if (Modifier.isAbstract(superclass.getModifiers())) {
+                registerSpec(new SubtypeSpec(superclass, subtype), specsByClass);
+            } else {
+                logger.trace("Not registering subtype {} to concrete superclass {}", subtype.getSimpleName(), superclass.getSimpleName());
+            }
+            registerSuperinterfaces(superclass, subtype, specsByClass);
+        }
+    }
+
+    private static void registerSuperinterfaces(Class<?> classToScan, Class<?> subtype, Map<Class<?>, InjectionSpec> specsByClass) {
+        for (var i : classToScan.getInterfaces()) {
+            registerSpec(new SubtypeSpec(i, subtype), specsByClass);
+            registerSuperinterfaces(i, subtype, specsByClass);
+        }
+    }
+
     private static MethodHandleSpec methodHandleSpecFor(Class<?> c) {
         Constructor<?> constructor = getSuitableConstructorIfAny(c);
         if (constructor == null) {
             throw new IllegalStateException("No suitable constructor for " + c);
         }
 
-        MethodHandle ctorHandle;
         try {
-            ctorHandle = lookup().unreflectConstructor(constructor);
+            return MethodHandleSpec.forConstructor(lookup(), constructor);
         } catch (IllegalAccessException e) {
             throw new IllegalStateException(e);
         }
-
-        List<ParameterSpec> parameters = Stream.of(constructor.getParameters()).map(ParameterSpec::from).toList();
-
-        return new MethodHandleSpec(c, ctorHandle, parameters);
     }
 
     /**
      * @return true (unless an assertion fails). Never returns false.
      */
-    private static boolean seedMapIsValid(Map<Class<?>, InjectionSpec> seed) {
+    private static boolean seedMapIsValid(Map<Class<?>, UnambiguousSpec> seed) {
         seed.forEach(
             (c, s) -> { assert s.requestedType().equals(c) : "Spec must be associated with its requestedType, not " + c + ": " + s; }
         );
@@ -261,17 +281,17 @@ public final class Injector {
      * pretend there's some massive method taking all of them as parameters
      */
     private static ParameterSpec syntheticParameterSpec(Class<?> c) {
-        return new ParameterSpec("synthetic_" + c.getSimpleName(), c, c);
+        return new ParameterSpec("synthetic_" + c.getSimpleName(), c, c, EnumSet.noneOf(ParameterModifier.class));
     }
 
     private static Constructor<?> getSuitableConstructorIfAny(Class<?> type) {
         var constructors = Stream.of(type.getConstructors()).filter(not(Constructor::isSynthetic)).toList();
         if (constructors.size() == 1) {
-            return constructors.get(0);
+            return constructors.getFirst();
         }
         var injectConstructors = constructors.stream().filter(c -> c.isAnnotationPresent(Inject.class)).toList();
         if (injectConstructors.size() == 1) {
-            return injectConstructors.get(0);
+            return injectConstructors.getFirst();
         }
         logger.trace("No suitable constructor for {}", type);
         return null;
@@ -283,20 +303,15 @@ public final class Injector {
         if (existing == null || existing.equals(spec)) {
             logger.trace("Register spec: {}", spec);
         } else {
-            throw new IllegalStateException("Ambiguous specifications for " + requestedType + ": " + existing + " and " + spec);
+            AmbiguousSpec ambiguousSpec = new AmbiguousSpec(requestedType, spec, existing);
+            logger.trace("Ambiguity discovered for {}", requestedType);
+            specsByClass.put(requestedType, ambiguousSpec);
         }
     }
 
-    private List<InjectionStep> injectionPlan(Set<Class<?>> requiredClasses, Map<Class<?>, InjectionSpec> specsByClass) {
+    private List<InjectionStep> injectionPlan(Set<Class<?>> seedClasses, Map<Class<?>, InjectionSpec> specsByClass) {
         logger.trace("Constructing instantiation plan");
-        Set<Class<?>> allParameterTypes = new HashSet<>();
-        specsByClass.values().forEach(spec -> {
-            if (spec instanceof MethodHandleSpec m) {
-                m.parameters().stream().map(ParameterSpec::injectableType).forEachOrdered(allParameterTypes::add);
-            }
-        });
-
-        var plan = new Planner(specsByClass, requiredClasses, allParameterTypes).injectionPlan();
+        var plan = new Planner(specsByClass, seedClasses).computeInjectionPlan();
         if (logger.isDebugEnabled()) {
             logger.debug("Injection plan: {}", plan.stream().map(Object::toString).collect(joining("\n\t", "\n\t", "")));
         }

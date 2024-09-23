@@ -19,7 +19,8 @@ module org.elasticsearch.base {
         to
             org.elasticsearch.xcontent,
             org.elasticsearch.nativeaccess,
-            org.elasticsearch.entitlement;
+            org.elasticsearch.entitlement,
+            org.elasticsearch.nalbind;
 
     uses ModuleQualifiedExportsService;
 }

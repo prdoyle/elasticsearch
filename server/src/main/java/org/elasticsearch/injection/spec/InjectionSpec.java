@@ -9,6 +9,10 @@
 
 package org.elasticsearch.injection.spec;
 
-public sealed interface InjectionSpec permits MethodHandleSpec, ExistingInstanceSpec {
+/**
+ * Specifies how a particular {@link #requestedType} should be passed to constructors that <em>request</em> it
+ * by declaring a constructor parameter naming that type.
+ */
+public sealed interface InjectionSpec permits AmbiguousSpec, UnambiguousSpec {
     Class<?> requestedType();
 }

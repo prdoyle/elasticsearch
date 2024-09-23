@@ -7,6 +7,13 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-package org.elasticsearch.injection.step;
+package org.elasticsearch.injection.spec;
 
-public sealed interface InjectionStep permits CreateCollectionProxyStep, CreateInstanceProxyStep, InstantiateStep, ResolveCollectionProxyStep, ResolveInstanceProxyStep, RollupStep {}
+/**
+ * Indicates that the {@link #requestedType} should be injected by using an instance
+ * of a specified {@link #subtype}.
+ */
+public record SubtypeSpec(
+    Class<?> requestedType, // The supertype, in this case
+    Class<?> subtype
+) implements UnambiguousSpec { }

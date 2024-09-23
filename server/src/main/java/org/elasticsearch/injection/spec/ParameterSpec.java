@@ -9,17 +9,58 @@
 
 package org.elasticsearch.injection.spec;
 
+import org.elasticsearch.injection.api.Proxy;
+
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.Set;
+
+import static java.util.Collections.unmodifiableSet;
+import static org.elasticsearch.injection.spec.ParameterModifier.CAN_BE_PROXIED;
+import static org.elasticsearch.injection.spec.ParameterModifier.COLLECTION;
 
 /**
  * Captures the pertinent info required to inject one of the arguments of a constructor.
- * @param name is for troubleshooting; it's not strictly needed
- * @param formalType is the declared class of the parameter
- * @param injectableType is the target type of the injection dependency
+ * @param name for troubleshooting; it's not strictly needed
+ * @param formalType the declared class of the parameter
+ * @param injectableType the target type of the injection dependency
+ * @param modifiers flags that specify particular variations on injection behaviour
  */
-public record ParameterSpec(String name, Class<?> formalType, Class<?> injectableType) {
+public record ParameterSpec(
+    String name,
+    Class<?> formalType,
+    Class<?> injectableType,
+    Set<ParameterModifier> modifiers
+) {
     public static ParameterSpec from(Parameter parameter) {
-        // We currently have no cases where the formal and injectable types are different.
-        return new ParameterSpec(parameter.getName(), parameter.getType(), parameter.getType());
+        var modifiers = EnumSet.noneOf(ParameterModifier.class);
+        Class<?> injectableType;
+        if (parameter.isAnnotationPresent(Proxy.class)) {
+            modifiers.add(CAN_BE_PROXIED);
+        }
+        if (Iterable.class.isAssignableFrom(parameter.getType()) && parameter.getType().isAssignableFrom(Collection.class)) {
+            modifiers.add(COLLECTION);
+            modifiers.add(CAN_BE_PROXIED);
+            var pt = (ParameterizedType) parameter.getParameterizedType();
+            injectableType = rawClass(pt.getActualTypeArguments()[0]);
+        } else {
+            injectableType = parameter.getType();
+        }
+        return new ParameterSpec(parameter.getName(), parameter.getType(), injectableType, unmodifiableSet(modifiers));
+    }
+
+    public static Class<?> rawClass(Type sourceType) {
+        if (sourceType instanceof ParameterizedType pt) {
+            return (Class<?>)pt.getRawType();
+        } else {
+            return (Class<?>)sourceType;
+        }
+    }
+
+    public boolean canBeProxied() {
+        return modifiers.contains(CAN_BE_PROXIED);
     }
 }

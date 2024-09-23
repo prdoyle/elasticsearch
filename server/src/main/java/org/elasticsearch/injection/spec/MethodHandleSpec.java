@@ -10,22 +10,38 @@
 package org.elasticsearch.injection.spec;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 /**
  * Indicates that a type should be instantiated by calling the given {@link java.lang.invoke.MethodHandle}.
  * <p>
  * <em>Design note</em>: the intent is that the semantics are fully specified by this record,
  * and no additional reflection logic is required to determine how the object should be injected.
- * Roughly speaking: all the reflection should be finished, and the results should be stored in this object.
+ * In other words: all the reflection should be finished before creating one of these,
+ * and the results should be stored in this object.
  */
-public record MethodHandleSpec(Class<?> requestedType, MethodHandle methodHandle, List<ParameterSpec> parameters) implements InjectionSpec {
+public record MethodHandleSpec(
+    Class<?> requestedType,
+    MethodHandle methodHandle,
+    List<ParameterSpec> parameters
+) implements UnambiguousSpec {
     public MethodHandleSpec {
         assert Objects.equals(methodHandle.type().parameterList(), parameters.stream().map(ParameterSpec::formalType).toList())
             : "MethodHandle parameter types must match the supplied parameter info; "
                 + methodHandle.type().parameterList()
                 + " vs "
                 + parameters;
+    }
+
+    public static MethodHandleSpec forConstructor(MethodHandles.Lookup lookup, Constructor<?> constructor) throws IllegalAccessException {
+        return new MethodHandleSpec(
+            constructor.getDeclaringClass(),
+            lookup.unreflectConstructor(constructor),
+            Stream.of(constructor.getParameters()).map(ParameterSpec::from).toList()
+        );
     }
 }

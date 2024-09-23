@@ -38,6 +38,7 @@ dependencies {
   api project(":libs:tdigest")
   implementation project(":libs:simdvec")
   implementation project(":libs:entitlement")
+  implementation project(":libs:nalbind")
 
   // lucene
   api "org.apache.lucene:lucene-core:${versions.lucene}"

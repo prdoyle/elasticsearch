@@ -9,4 +9,11 @@
 
 package org.elasticsearch.injection.step;
 
-public sealed interface InjectionStep permits CreateCollectionProxyStep, CreateInstanceProxyStep, InstantiateStep, ResolveCollectionProxyStep, ResolveInstanceProxyStep, RollupStep {}
+/**
+ * Makes all instances of {@code subtype} also available as {@code supertype}.
+ */
+public record RollupStep(Class<?> subtype, Class<?> supertype) implements InjectionStep {
+    public RollupStep {
+        assert supertype.isAssignableFrom(subtype);
+    }
+}

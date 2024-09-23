@@ -11,11 +11,14 @@ package org.elasticsearch.injection;
 
 import org.elasticsearch.test.ESTestCase;
 
-import java.lang.invoke.MethodHandles;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
-public class InjectorTests extends ESTestCase {
+/**
+ * Tests of the entire {@link Injector} "workflow" to ensure the resulting object graphs are correct.
+ */
+public class FullInjectionTests extends ESTestCase {
 
     public record First() {}
 
@@ -40,7 +43,6 @@ public class InjectorTests extends ESTestCase {
      * the instance of that superclass takes precedence over any instances of any subclasses.
      */
     public void testConcreteSubclass() {
-        MethodHandles.lookup();
         assertEquals(
             Superclass.class,
             Injector.create()
@@ -49,7 +51,6 @@ public class InjectorTests extends ESTestCase {
                 .get(Superclass.class)
                 .getClass()
         );
-        MethodHandles.lookup();
         assertEquals(
             Superclass.class,
             Injector.create()
@@ -58,7 +59,6 @@ public class InjectorTests extends ESTestCase {
                 .get(Superclass.class)
                 .getClass()
         );
-        MethodHandles.lookup();
         assertEquals(
             Superclass.class,
             Injector.create()
@@ -69,20 +69,29 @@ public class InjectorTests extends ESTestCase {
         );
     }
 
+    public void testListeners() {
+        SomeClient client = (SomeClient) Injector.create()
+            .addClasses(List.of(SomeClient.class))
+            .inject(List.of(SomeClient.class))
+            .get(SomeClient.class);
+        assertNotNull(client);
+        var listeners = client.service().listeners();
+        assertEquals(1, listeners.size());
+        assertSame(client, client.service().listeners().iterator().next());
+    }
+
     //
     // Sad paths
     //
 
     public void testBadInterfaceClass() {
         assertThrows(IllegalStateException.class, () -> {
-            MethodHandles.lookup();
             Injector.create().addClass(Listener.class).inject(List.of());
         });
     }
 
     public void testBadUnknownType() {
         // Injector knows only about Component4, discovers Listener, but can't find any subtypes
-        MethodHandles.lookup();
         Injector injector = Injector.create().addClass(Component4.class);
 
         assertThrows(IllegalStateException.class, () -> injector.inject(List.of()));
@@ -90,7 +99,6 @@ public class InjectorTests extends ESTestCase {
 
     public void testBadCircularDependency() {
         assertThrows(IllegalStateException.class, () -> {
-            MethodHandles.lookup();
             Injector injector = Injector.create();
             injector.addClasses(List.of(Circular1.class, Circular2.class)).inject(List.of());
         });
@@ -103,7 +111,6 @@ public class InjectorTests extends ESTestCase {
     public void testBadCircularDependencyViaParameter() {
         record UsesCircular1(Circular1 circular1) {}
         assertThrows(IllegalStateException.class, () -> {
-            MethodHandles.lookup();
             Injector.create().addClass(UsesCircular1.class).inject(List.of());
         });
     }
@@ -113,7 +120,6 @@ public class InjectorTests extends ESTestCase {
         record Service2(Service1 service1) {}
         record Service3(Service2 service2) implements Service1 {}
         assertThrows(IllegalStateException.class, () -> {
-            MethodHandles.lookup();
             Injector injector = Injector.create();
             injector.addClasses(List.of(Service2.class, Service3.class)).inject(List.of());
         });
@@ -125,24 +131,9 @@ public class InjectorTests extends ESTestCase {
 
     public interface Listener {}
 
-    public record Component1() implements Listener {}
-
-    public record Component2(Component1 component1) {}
-
     public record Component3(Service1 service1) {}
 
     public record Component4(Listener listener) {}
-
-    public record GoodService(List<Component1> components) {}
-
-    public record BadService(List<Component1> components) {
-        public BadService {
-            // Shouldn't be using the component list here!
-            assert components.isEmpty() == false;
-        }
-    }
-
-    public record MultiService(List<Component1> component1s, List<Component2> component2s) {}
 
     public record Circular1(Circular2 service2) {}
 
@@ -152,4 +143,9 @@ public class InjectorTests extends ESTestCase {
 
     public static class Subclass extends Superclass {}
 
+    public interface SomeListener {}
+
+    public record SomeService(Collection<SomeListener> listeners) {}
+
+    public record SomeClient(SomeService service) implements SomeListener {}
 }

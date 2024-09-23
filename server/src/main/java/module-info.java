@@ -32,6 +32,7 @@ module org.elasticsearch.server {
     requires org.elasticsearch.tdigest;
     requires org.elasticsearch.simdvec;
     requires org.elasticsearch.entitlement;
+    requires org.elasticsearch.nalbind;
 
     requires hppc;
     requires HdrHistogram;
