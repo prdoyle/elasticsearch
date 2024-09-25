@@ -18,6 +18,16 @@ import static org.elasticsearch.entitlement.runtime.api.FlagEntitlement.EXIT_JVM
 import static org.elasticsearch.entitlement.runtime.internals.EntitlementInternals.isActive;
 
 public class EntitlementChecks {
+    static boolean isAgentBooted = false;
+
+    public static void setAgentBooted() {
+        isAgentBooted = true;
+    }
+
+    public static boolean isAgentBooted() {
+        return isAgentBooted;
+    }
+
     private static final Set<Module> entitledToExit = newSetFromMap(new ConcurrentHashMap<>());
 
     /**
