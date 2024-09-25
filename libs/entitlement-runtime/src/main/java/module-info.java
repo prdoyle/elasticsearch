@@ -10,10 +10,8 @@
 module org.elasticsearch.entitlement.runtime {
     requires org.elasticsearch.base;
 
-    exports org.elasticsearch.entitlement.runtime.api;
+    exports org.elasticsearch.entitlement.runtime.api to org.elasticsearch.entitlement.agent;
+    exports org.elasticsearch.entitlement.runtime.config to org.elasticsearch.entitlement.agent;
 
-    // TODO: Restrict these to the agent
-    exports org.elasticsearch.entitlement.runtime.config;
-
-    opens org.elasticsearch.entitlement.runtime.config;
+    opens org.elasticsearch.entitlement.runtime.config to org.elasticsearch.entitlement.agent;
 }
