@@ -26,6 +26,7 @@ import static java.util.stream.Collectors.toSet;
 public class EntitlementAgent {
 
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
+        EntitlementChecks.setAgentBooted();
         // System.out.println("Starting premain");
 
         // Add the runtime library (the one with the entitlement checks) to the bootstrap classpath

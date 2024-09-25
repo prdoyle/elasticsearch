@@ -25,6 +25,10 @@ import org.junit.After;
 @WithoutSecurityManager
 public class EntitlementAgentTests extends ESTestCase {
 
+    public void testAgentBooted() {
+        assertTrue(EntitlementChecks.isAgentBooted());
+    }
+
     @After
     public void deactivate() {
         // Without this, JUnit can't exit
