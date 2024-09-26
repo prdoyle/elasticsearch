@@ -9,7 +9,15 @@
 
 package org.elasticsearch.entitlement.runtime.api;
 
+import java.util.Objects;
+
 public class NotEntitledException extends RuntimeException {
+    public static final String CLASS_LOADER_INFO;
+
+    static {
+        CLASS_LOADER_INFO = Objects.toString(NotEntitledException.class.getClassLoader());
+        System.err.println("!!!!!!!!!!!!!!!!!!! My class loader is " + CLASS_LOADER_INFO);
+    }
     public NotEntitledException(String message) {
         super(message);
     }

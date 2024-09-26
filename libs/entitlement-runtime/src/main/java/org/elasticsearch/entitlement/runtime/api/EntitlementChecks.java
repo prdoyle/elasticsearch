@@ -86,4 +86,5 @@ public class EntitlementChecks {
         }
         throw new NotEntitledException("Missing " + EXIT_JVM + " entitlement for " + requestingModule);
     }
+
 }

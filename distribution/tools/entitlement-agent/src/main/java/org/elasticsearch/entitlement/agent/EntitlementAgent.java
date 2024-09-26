@@ -12,6 +12,7 @@ package org.elasticsearch.entitlement.agent;
 import org.elasticsearch.entitlement.instrumentation.Instrumenter;
 import org.elasticsearch.entitlement.instrumentation.MethodKey;
 import org.elasticsearch.entitlement.runtime.api.EntitlementChecks;
+import org.elasticsearch.entitlement.runtime.api.NotEntitledException;
 import org.elasticsearch.entitlement.runtime.config.SystemMethods;
 
 import java.lang.instrument.Instrumentation;
@@ -26,7 +27,8 @@ import static java.util.stream.Collectors.toSet;
 public class EntitlementAgent {
 
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
-        EntitlementChecks.setAgentBooted();
+//        EntitlementChecks.isAgentBooted();
+//        EntitlementChecks.setAgentBooted();
         // System.out.println("Starting premain");
 
         // Add the runtime library (the one with the entitlement checks) to the bootstrap classpath
