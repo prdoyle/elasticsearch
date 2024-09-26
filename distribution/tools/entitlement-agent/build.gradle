@@ -9,13 +9,7 @@
 
 apply plugin: 'elasticsearch.build'
 
-configurations {
-  entitlementRuntime
-}
-
 dependencies {
-  entitlementRuntime project(":libs:elasticsearch-entitlement-runtime")
-  implementation project(":libs:elasticsearch-entitlement-runtime")
   implementation 'org.ow2.asm:asm:9.7'
   testImplementation project(":test:framework")
 }
@@ -23,7 +17,10 @@ dependencies {
 tasks.named('test').configure {
   systemProperty "tests.security.manager", "false"
   dependsOn('jar')
-  jvmArgs "-javaagent:${ tasks.named('jar').flatMap{ it.archiveFile }.get()}"
+
+  def agentJar = tasks.named('jar').flatMap { it.archiveFile }.get()
+  jvmArgs "-javaagent:${agentJar}"
+  classpath -= sourceSets.main.output // Don't _also_ put the classes on the classpath
 }
 
 tasks.named('jar').configure {

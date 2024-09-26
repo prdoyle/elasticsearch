@@ -15,14 +15,9 @@ import org.elasticsearch.entitlement.runtime.internals.EntitlementInternals;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.ESTestCase.WithoutSecurityManager;
 import org.junit.After;
-import org.junit.Before;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * This is an end-to-end test that runs with the javaagent installed.
@@ -52,13 +47,13 @@ public class EntitlementAgentTests extends ESTestCase {
      * We can't really check that this one passes because it will just exit the JVM.
      */
     public void test_exitNotEntitled_throws() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-//        System.err.println("!!! Classpath: " + String.join("\n", System.getProperty("java.class.path").split(File.pathSeparator)));
+        System.err.println("!!! Classpath: " + String.join("\n", System.getProperty("java.class.path").split(File.pathSeparator)));
         System.err.println("!!! test object class loader: " + getClass().getClassLoader());
         EntitlementChecks.activate();
         Class<NotEntitledException> expectedThrowable = NotEntitledException.class;
         var info = NotEntitledException.CLASS_LOADER_INFO;
         System.err.println("!!! expected classloader info: " + info);
-        Throwable thrown = assertThrows(Throwable.class, () -> System.exit(123));
+        Throwable thrown = assertThrows(NotEntitledException.class, () -> System.exit(123));
         System.err.println("!!! thrown classloader is " + thrown.getClass().getClassLoader());
         assertSame(expectedThrowable.getClassLoader(), thrown.getClass().getClassLoader());
     }
