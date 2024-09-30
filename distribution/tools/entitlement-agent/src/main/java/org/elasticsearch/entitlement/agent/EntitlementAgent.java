@@ -11,7 +11,7 @@ package org.elasticsearch.entitlement.agent;
 
 import org.elasticsearch.entitlement.instrumentation.Instrumenter;
 import org.elasticsearch.entitlement.instrumentation.MethodKey;
-import org.elasticsearch.entitlement.runtime.api.EntitlementChecks;
+import org.elasticsearch.entitlement.checks.EntitlementChecks;
 import org.elasticsearch.entitlement.runtime.config.SystemMethods;
 
 import java.lang.instrument.Instrumentation;

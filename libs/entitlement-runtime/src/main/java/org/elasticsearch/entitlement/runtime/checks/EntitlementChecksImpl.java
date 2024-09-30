@@ -7,7 +7,12 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-package org.elasticsearch.entitlement.runtime.api;
+package org.elasticsearch.entitlement.runtime.checks;
+
+import org.elasticsearch.entitlement.checks.EntitlementChecks;
+import org.elasticsearch.entitlement.runtime.api.Entitlement;
+import org.elasticsearch.entitlement.runtime.api.FlagEntitlement;
+import org.elasticsearch.entitlement.runtime.api.NotEntitledException;
 
 import java.util.Optional;
 import java.util.Set;

@@ -9,7 +9,7 @@
 
 package org.elasticsearch.entitlement.agent;
 
-import org.elasticsearch.entitlement.runtime.api.EntitlementChecks;
+import org.elasticsearch.entitlement.checks.EntitlementChecks;
 import org.elasticsearch.entitlement.runtime.api.NotEntitledException;
 import org.elasticsearch.entitlement.runtime.internals.EntitlementInternals;
 import org.elasticsearch.test.ESTestCase;

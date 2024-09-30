@@ -10,12 +10,13 @@
 apply plugin: 'elasticsearch.build'
 
 configurations {
-  entitlementRuntime
+  entitlementTrampoline
 }
 
 dependencies {
-  entitlementRuntime project(":libs:elasticsearch-entitlement-runtime")
-  implementation project(":libs:elasticsearch-entitlement-runtime")
+  entitlementTrampoline project(":distribution:tools:entitlement-trampoline")
+  compileOnly project(":libs:elasticsearch-entitlement-runtime")
+  compileOnly project(":distribution:tools:entitlement-trampoline")
   implementation 'org.ow2.asm:asm:9.7'
   testImplementation project(":test:framework")
 }

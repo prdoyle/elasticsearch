@@ -7,9 +7,7 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-module org.elasticsearch.entitlement.agent {
-    requires java.instrument;
-    requires org.objectweb.asm;
-    requires org.elasticsearch.entitlement.runtime;
-    requires org.elasticsearch.entitlement.trampoline;
+module org.elasticsearch.entitlement.trampoline {
+    exports org.elasticsearch.entitlement.checks;
+    uses org.elasticsearch.entitlement.checks.EntitlementChecks;
 }

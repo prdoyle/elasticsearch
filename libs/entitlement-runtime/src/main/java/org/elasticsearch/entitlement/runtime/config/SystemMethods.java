@@ -9,7 +9,7 @@
 
 package org.elasticsearch.entitlement.runtime.config;
 
-import org.elasticsearch.entitlement.runtime.api.EntitlementChecks;
+import org.elasticsearch.entitlement.checks.EntitlementChecks;
 
 public class SystemMethods {
     public static void exit(Class<?> callerCLass, System system, int status) {

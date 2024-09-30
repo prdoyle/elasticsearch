@@ -7,9 +7,22 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-module org.elasticsearch.entitlement.agent {
-    requires java.instrument;
-    requires org.objectweb.asm;
-    requires org.elasticsearch.entitlement.runtime;
-    requires org.elasticsearch.entitlement.trampoline;
+package org.elasticsearch.entitlement.checks;
+
+public interface EntitlementChecks {
+    static EntitlementChecks getInstance() {
+        EntitlementChecks result = EntitlementSPI.INSTANCE.get();
+        if (result == null) {
+            return EntitlementSPI.loadInstance();
+        } else {
+            return result;
+        }
+    }
+
+    void setAgentBooted();
+    boolean isAgentBooted();
+
+    void checkExitJvmEntitlement(Class<?> callerClass);
+
+    void activate();
 }
