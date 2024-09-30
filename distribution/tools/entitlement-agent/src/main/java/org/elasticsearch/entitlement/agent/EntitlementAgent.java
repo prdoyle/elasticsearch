@@ -12,7 +12,9 @@ package org.elasticsearch.entitlement.agent;
 import org.elasticsearch.entitlement.instrumentation.Instrumenter;
 import org.elasticsearch.entitlement.instrumentation.MethodKey;
 import org.elasticsearch.entitlement.checks.EntitlementChecks;
+import org.elasticsearch.entitlement.runtime.checks.EntitlementChecksImpl;
 import org.elasticsearch.entitlement.runtime.config.SystemMethods;
+import org.elasticsearch.entitlement.trampoline.EntitlementTrampoline;
 
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Method;
@@ -26,11 +28,13 @@ import static java.util.stream.Collectors.toSet;
 public class EntitlementAgent {
 
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
+        EntitlementTrampoline.setInstance(new EntitlementChecksImpl());
+        System.out.println("Starting premain");
         EntitlementChecks.getInstance().setAgentBooted();
-        // System.out.println("Starting premain");
 
         // Add the runtime library (the one with the entitlement checks) to the bootstrap classpath
         var jar = Paths.get(EntitlementChecks.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toFile();
+        System.out.println("THE JAR IS " + jar);
         inst.appendToBootstrapClassLoaderSearch(new JarFile(jar));
 
         // Hardcoded config for now

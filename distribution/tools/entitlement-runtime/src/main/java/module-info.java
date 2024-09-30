@@ -15,7 +15,7 @@ module org.elasticsearch.entitlement.runtime {
 
     exports org.elasticsearch.entitlement.runtime.api to org.elasticsearch.entitlement.agent;
     exports org.elasticsearch.entitlement.runtime.config to org.elasticsearch.entitlement.agent;
-    exports org.elasticsearch.entitlement.runtime.checks to org.elasticsearch.entitlement.trampoline;
+    exports org.elasticsearch.entitlement.runtime.checks to org.elasticsearch.entitlement.trampoline, org.elasticsearch.entitlement.agent;
 
     opens org.elasticsearch.entitlement.runtime.config to org.elasticsearch.entitlement.agent;
 

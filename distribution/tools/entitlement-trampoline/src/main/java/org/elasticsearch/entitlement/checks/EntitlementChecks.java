@@ -9,14 +9,11 @@
 
 package org.elasticsearch.entitlement.checks;
 
+import org.elasticsearch.entitlement.trampoline.EntitlementTrampoline;
+
 public interface EntitlementChecks {
     static EntitlementChecks getInstance() {
-        EntitlementChecks result = EntitlementSPI.INSTANCE.get();
-        if (result == null) {
-            return EntitlementSPI.loadInstance();
-        } else {
-            return result;
-        }
+        return EntitlementTrampoline.getInstance();
     }
 
     void setAgentBooted();

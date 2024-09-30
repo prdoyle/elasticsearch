@@ -9,5 +9,5 @@
 
 module org.elasticsearch.entitlement.trampoline {
     exports org.elasticsearch.entitlement.checks;
-    uses org.elasticsearch.entitlement.checks.EntitlementChecks;
+    exports org.elasticsearch.entitlement.trampoline to org.elasticsearch.entitlement.agent;
 }

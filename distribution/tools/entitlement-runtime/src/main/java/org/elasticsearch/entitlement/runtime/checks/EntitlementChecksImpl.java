@@ -25,7 +25,7 @@ import static org.elasticsearch.entitlement.runtime.internals.EntitlementInterna
 public class EntitlementChecksImpl implements EntitlementChecks {
     boolean isAgentBooted = false;
 
-    static final EntitlementChecksImpl INSTANCE = new EntitlementChecksImpl();
+    public static void loadMe(){}
 
     @Override
     public void setAgentBooted() {
