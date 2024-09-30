@@ -10,4 +10,5 @@
 module org.elasticsearch.entitlement.trampoline {
     exports org.elasticsearch.entitlement.checks;
     exports org.elasticsearch.entitlement.trampoline to org.elasticsearch.entitlement.agent;
+    exports org.elasticsearch.entitlement.config; // Must be callable from JCL methods
 }

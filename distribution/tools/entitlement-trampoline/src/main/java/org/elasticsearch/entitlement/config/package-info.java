@@ -7,12 +7,7 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-package org.elasticsearch.entitlement.runtime.config;
-
-import org.elasticsearch.entitlement.checks.EntitlementChecks;
-
-public class SystemMethods {
-    public static void exit(Class<?> callerCLass, System system, int status) {
-        EntitlementChecks.getInstance().checkExitJvmEntitlement(callerCLass);
-    }
-}
+/**
+ * Describes which sensitive methods should perform which permission checks.
+ */
+package org.elasticsearch.entitlement.config;

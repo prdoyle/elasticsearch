@@ -9,7 +9,9 @@ public class EntitlementTrampoline {
     private static final AtomicReference<EntitlementChecks> INSTANCE = new AtomicReference<>();
 
     public static void setInstance(EntitlementChecks instance) {
-        if (false == INSTANCE.compareAndSet(null, instance)) {
+        if (INSTANCE.compareAndSet(null, instance)) {
+            System.out.println("===== Installed EntitlementChecks instance in trampoline from loader " + EntitlementTrampoline.class.getClassLoader());
+        } else {
             throw new IllegalStateException("Entitlement trampoline already configured");
         }
     }

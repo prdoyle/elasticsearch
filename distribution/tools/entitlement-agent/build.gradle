@@ -15,7 +15,7 @@ configurations {
 
 dependencies {
   entitlementTrampoline project(":distribution:tools:entitlement-trampoline")
-  implementation project(":distribution:tools:entitlement-runtime")
+  compileOnly project(":distribution:tools:entitlement-runtime")
   compileOnly project(":distribution:tools:entitlement-trampoline")
   implementation 'org.ow2.asm:asm:9.7'
   testImplementation project(":test:framework")
