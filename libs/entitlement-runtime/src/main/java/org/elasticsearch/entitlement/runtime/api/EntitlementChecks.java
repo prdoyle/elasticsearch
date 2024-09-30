@@ -18,31 +18,37 @@ import static org.elasticsearch.entitlement.runtime.api.FlagEntitlement.EXIT_JVM
 import static org.elasticsearch.entitlement.runtime.internals.EntitlementInternals.isActive;
 
 public class EntitlementChecks {
-    static boolean isAgentBooted = false;
+    boolean isAgentBooted = false;
 
-    public static void setAgentBooted() {
+    private static final EntitlementChecks INSTANCE = new EntitlementChecks();
+
+    public static EntitlementChecks getInstance() {
+        return INSTANCE;
+    }
+
+    public void setAgentBooted() {
         isAgentBooted = true;
     }
 
-    public static boolean isAgentBooted() {
+    public boolean isAgentBooted() {
         return isAgentBooted;
     }
 
-    private static final Set<Module> entitledToExit = newSetFromMap(new ConcurrentHashMap<>());
+    private final Set<Module> entitledToExit = newSetFromMap(new ConcurrentHashMap<>());
 
     /**
      * Causes entitlements to be checked. Before this is called, entitlements are not enforced,
      * so there's no need for an application to set a lot of permissions which are required only during initialization.
      */
-    public static void activate() {
+    public void activate() {
         isActive = true;
     }
 
-    public static void revokeAll() {
+    public void revokeAll() {
         entitledToExit.clear();
     }
 
-    public static boolean grant(Module module, Entitlement e) {
+    public boolean grant(Module module, Entitlement e) {
         return switch (e) {
             case FlagEntitlement __ -> entitledToExit.add(module);
         };
@@ -73,7 +79,7 @@ public class EntitlementChecks {
         return isActive == false || (requestingModule == null) || requestingModule == EntitlementChecks.class.getModule();
     }
 
-    public static void checkExitJvmEntitlement(Class<?> callerClass) {
+    public void checkExitJvmEntitlement(Class<?> callerClass) {
         // System.out.println("Checking for JVM Exit entitlement on " + callerClass.getSimpleName());
         var requestingModule = requestingModule(callerClass);
         if (isTriviallyAllowed(requestingModule)) {

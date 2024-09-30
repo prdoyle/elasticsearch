@@ -13,6 +13,6 @@ import org.elasticsearch.entitlement.runtime.api.EntitlementChecks;
 
 public class SystemMethods {
     public static void exit(Class<?> callerCLass, System system, int status) {
-        EntitlementChecks.checkExitJvmEntitlement(callerCLass);
+        EntitlementChecks.getInstance().checkExitJvmEntitlement(callerCLass);
     }
 }

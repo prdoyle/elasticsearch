@@ -26,7 +26,7 @@ import org.junit.After;
 public class EntitlementAgentTests extends ESTestCase {
 
     public void testAgentBooted() {
-        assertTrue(EntitlementChecks.isAgentBooted());
+        assertTrue(EntitlementChecks.getInstance().isAgentBooted());
     }
 
     @After
@@ -39,7 +39,7 @@ public class EntitlementAgentTests extends ESTestCase {
      * We can't really check that this one passes because it will just exit the JVM.
      */
     public void test_exitNotEntitled_throws() {
-        EntitlementChecks.activate();
+        EntitlementChecks.getInstance().activate();
         assertThrows(NotEntitledException.class, () -> System.exit(123));
     }
 
