@@ -252,42 +252,42 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_net_DatagramSocket$$setDatagramSocketImplFactory(Class<?> callerClass, DatagramSocketImplFactory fac) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_net_HttpURLConnection$$setFollowRedirects(Class<?> callerClass, boolean set) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_net_ServerSocket$$setSocketFactory(Class<?> callerClass, SocketImplFactory fac) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_net_Socket$$setSocketImplFactory(Class<?> callerClass, SocketImplFactory fac) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_net_URL$$setURLStreamHandlerFactory(Class<?> callerClass, URLStreamHandlerFactory fac) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_net_URLConnection$$setFileNameMap(Class<?> callerClass, FileNameMap map) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_net_URLConnection$$setContentHandlerFactory(Class<?> callerClass, ContentHandlerFactory fac) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$javax_net_ssl_HttpsURLConnection$setSSLSocketFactory(
         Class<?> callerClass,
         HttpsURLConnection connection,
@@ -296,17 +296,17 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
         policyManager.checkSetHttpsConnectionProperties(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$javax_net_ssl_HttpsURLConnection$$setDefaultSSLSocketFactory(Class<?> callerClass, SSLSocketFactory sf) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$javax_net_ssl_HttpsURLConnection$$setDefaultHostnameVerifier(Class<?> callerClass, HostnameVerifier hv) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$javax_net_ssl_SSLContext$$setDefault(Class<?> callerClass, SSLContext context) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }

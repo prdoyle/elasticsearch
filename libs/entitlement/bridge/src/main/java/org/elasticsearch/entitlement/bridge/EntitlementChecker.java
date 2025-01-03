@@ -12,6 +12,10 @@ package org.elasticsearch.entitlement.bridge;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.PrintWriter;
+import java.net.ContentHandlerFactory;
+import java.net.DatagramSocketImplFactory;
+import java.net.FileNameMap;
+import java.net.SocketImplFactory;
 import java.net.URL;
 import java.net.URLStreamHandlerFactory;
 import java.util.List;
@@ -151,7 +155,6 @@ public interface EntitlementChecker {
     // Can't call bridge
 //    void check$java_util_logging_LogManager$(Class<?> callerClass);
 
-    /* These seem to cause network errors in other tests
     void check$java_net_DatagramSocket$$setDatagramSocketImplFactory(Class<?> callerClass, DatagramSocketImplFactory fac);
 
     void check$java_net_HttpURLConnection$$setFollowRedirects(Class<?> callerClass, boolean set);
@@ -165,6 +168,5 @@ public interface EntitlementChecker {
     void check$java_net_URLConnection$$setFileNameMap(Class<?> callerClass, FileNameMap map);
 
     void check$java_net_URLConnection$$setContentHandlerFactory(Class<?> callerClass, ContentHandlerFactory fac);
-     */
 
 }
