@@ -107,9 +107,9 @@ public interface EntitlementChecker {
 
     void check$java_lang_System$$setErr(Class<?> callerClass, PrintStream err);
 
-    void check$java_lang_Runtime$$addShutdownHook(Class<?> callerClass, Thread hook);
+    void check$java_lang_Runtime$addShutdownHook(Class<?> callerClass, Runtime runtime, Thread hook);
 
-    void check$java_lang_Runtime$$removeShutdownHook(Class<?> callerClass, Thread hook);
+    void check$java_lang_Runtime$removeShutdownHook(Class<?> callerClass, Runtime runtime, Thread hook);
 
     void check$jdk_tools_jlink_internal_Jlink$(Class<?> callerClass);
 

@@ -12,5 +12,8 @@ module org.elasticsearch.entitlement.qa.common {
     requires org.elasticsearch.base;
     requires org.elasticsearch.logging;
 
+    // Modules we need to test against
+    requires jdk.attach;
+
     exports org.elasticsearch.entitlement.qa.common;
 }

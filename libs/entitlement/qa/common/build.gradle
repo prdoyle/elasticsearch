@@ -13,3 +13,7 @@ dependencies {
   implementation project(':server')
   implementation project(':libs:logging')
 }
+
+tasks.named("test").configure {
+  jvmArgs('--add-opens=java.base/java.nio=ALL-UNNAMED')
+}

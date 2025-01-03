@@ -12,6 +12,18 @@ package org.elasticsearch.entitlement.qa.common;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.core.SuppressForbidden;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyBreakIteratorProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCalendarDataProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCalendarNameProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCollatorProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCurrencyNameProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyDateFormatProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyDateFormatSymbolsProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyDecimalFormatSymbolsProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyLocaleNameProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyLocaleServiceProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyNumberFormatProvider;
+import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyTimeZoneNameProvider;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.rest.BaseRestHandler;
@@ -60,20 +72,23 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
         }
     }
 
-    private static final Map<String, CheckAction> checkActions = Map.ofEntries(
-        entry("runtime_exit", deniedToPlugins(RestEntitlementsCheckAction::runtimeExit)),
-        entry("runtime_halt", deniedToPlugins(RestEntitlementsCheckAction::runtimeHalt)),
-        entry("create_classloader", forPlugins(RestEntitlementsCheckAction::createClassLoader)),
-        entry("processBuilder_start", deniedToPlugins(RestEntitlementsCheckAction::processBuilder_start)),
-        entry("processBuilder_startPipeline", deniedToPlugins(RestEntitlementsCheckAction::processBuilder_startPipeline)),
-        entry("set_https_connection_properties", forPlugins(RestEntitlementsCheckAction::setHttpsConnectionProperties)),
-        entry("set_default_ssl_socket_factory", alwaysDenied(RestEntitlementsCheckAction::setDefaultSSLSocketFactory)),
-        entry("set_default_hostname_verifier", alwaysDenied(RestEntitlementsCheckAction::setDefaultHostnameVerifier)),
-        entry("set_default_ssl_context", alwaysDenied(RestEntitlementsCheckAction::setDefaultSSLContext))
-    );
+    private static final Map<String, CheckAction> checkActions;
+
+    static {
+        checkActions = Map.ofEntries(
+            entry("runtime_exit", deniedToPlugins(RestEntitlementsCheckAction::runtimeExit)),
+            entry("runtime_halt", deniedToPlugins(RestEntitlementsCheckAction::runtimeHalt)),
+            entry("create_classloader", forPlugins(RestEntitlementsCheckAction::createClassLoader)),
+            entry("processBuilder_start", deniedToPlugins(RestEntitlementsCheckAction::processBuilder_start)),
+            entry("processBuilder_startPipeline", deniedToPlugins(RestEntitlementsCheckAction::processBuilder_startPipeline)),
+            entry("set_https_connection_properties", forPlugins(RestEntitlementsCheckAction::setHttpsConnectionProperties)),
+            entry("set_default_ssl_socket_factory", alwaysDenied(RestEntitlementsCheckAction::setDefaultSSLSocketFactory)),
+            entry("set_default_hostname_verifier", alwaysDenied(RestEntitlementsCheckAction::setDefaultHostnameVerifier)),
+            entry("set_default_ssl_context", alwaysDenied(RestEntitlementsCheckAction::setDefaultSSLContext))
+        );
+    }
 
     private static void setDefaultSSLContext() {
-        logger.info("Calling SSLContext.setDefault");
         try {
             SSLContext.setDefault(SSLContext.getDefault());
         } catch (NoSuchAlgorithmException e) {
@@ -82,12 +97,10 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
     }
 
     private static void setDefaultHostnameVerifier() {
-        logger.info("Calling HttpsURLConnection.setDefaultHostnameVerifier");
         HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> false);
     }
 
     private static void setDefaultSSLSocketFactory() {
-        logger.info("Calling HttpsURLConnection.setDefaultSSLSocketFactory");
         HttpsURLConnection.setDefaultSSLSocketFactory(new TestSSLSocketFactory());
     }
 
@@ -126,10 +139,105 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
     }
 
     private static void setHttpsConnectionProperties() {
-        logger.info("Calling setSSLSocketFactory");
-        var connection = new TestHttpsURLConnection();
-        connection.setSSLSocketFactory(new TestSSLSocketFactory());
+        new TestHttpsURLConnection().setSSLSocketFactory(new TestSSLSocketFactory());
     }
+
+    private static void system$$setIn() {
+        System.setIn(System.in);
+    }
+
+    private static void system$$setOut() {
+        System.setOut(System.out);
+    }
+
+    private static void system$$setErr() {
+        System.setErr(System.err);
+    }
+
+    private static void runtime$addShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {}));
+    }
+
+    private static void runtime$$removeShutdownHook() {
+        Runtime.getRuntime().removeShutdownHook(new Thread(() -> {}));
+    }
+
+    private static void thread$$setDefaultUncaughtExceptionHandler() {
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> { throw new IllegalStateException(throwable); });
+    }
+
+    private static void localeServiceProvider$() {
+        new DummyLocaleServiceProvider();
+    }
+
+    private static void breakIteratorProvider$() {
+        new DummyBreakIteratorProvider();
+    }
+
+    private static void collatorProvider$() {
+        new DummyCollatorProvider();
+    }
+
+    private static void dateFormatProvider$() {
+        new DummyDateFormatProvider();
+    }
+
+    private static void dateFormatSymbolsProvider$() {
+        new DummyDateFormatSymbolsProvider();
+    }
+
+    private static void decimalFormatSymbolsProvider$() {
+        new DummyDecimalFormatSymbolsProvider();
+    }
+
+    private static void numberFormatProvider$() {
+        new DummyNumberFormatProvider();
+    }
+
+    private static void calendarDataProvider$() {
+        new DummyCalendarDataProvider();
+    }
+
+    private static void calendarNameProvider$() {
+        new DummyCalendarNameProvider();
+    }
+
+    private static void currencyNameProvider$() {
+        new DummyCurrencyNameProvider();
+    }
+
+    private static void localeNameProvider$() {
+        new DummyLocaleNameProvider();
+    }
+
+    private static void timeZoneNameProvider$() {
+        new DummyTimeZoneNameProvider();
+    }
+
+    private static void logManager$() {
+    }
+
+    private static void datagramSocket$$setDatagramSocketImplFactory() {
+    }
+
+    private static void httpURLConnection$$setFollowRedirects() {
+    }
+
+    private static void serverSocket$$setSocketFactory() {
+    }
+
+    private static void socket$$setSocketImplFactory() {
+    }
+
+    private static void url$$setURLStreamHandlerFactory() {
+    }
+
+    private static void urlConnection$$setFileNameMap() {
+    }
+
+    private static void urlConnection$$setContentHandlerFactory() {
+    }
+
 
     public RestEntitlementsCheckAction(String prefix) {
         this.prefix = prefix;

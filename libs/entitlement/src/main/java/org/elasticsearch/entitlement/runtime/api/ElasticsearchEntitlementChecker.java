@@ -138,12 +138,12 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
     }
 
     @Override
-    public void check$java_lang_Runtime$$addShutdownHook(Class<?> callerClass, Thread hook) {
+    public void check$java_lang_Runtime$addShutdownHook(Class<?> callerClass, Runtime runtime, Thread hook) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
     @Override
-    public void check$java_lang_Runtime$$removeShutdownHook(Class<?> callerClass, Thread hook) {
+    public void check$java_lang_Runtime$removeShutdownHook(Class<?> callerClass, Runtime runtime, Thread hook) {
         policyManager.checkChangeJVMGlobalState(callerClass);
     }
 
