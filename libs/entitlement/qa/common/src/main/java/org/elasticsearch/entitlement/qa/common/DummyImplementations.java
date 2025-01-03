@@ -31,9 +31,11 @@ import java.util.spi.LocaleServiceProvider;
 import java.util.spi.TimeZoneNameProvider;
 
 /**
- * A collection of "dummy" locale providers that don't actually work.
+ * A collection of concrete subclasses that we can instantiate but that don't actually work.
+ * <p>
+ * A bit like Mockito but way more painful.
  */
-class DummyLocaleProviders {
+class DummyImplementations {
 
     static class DummyLocaleServiceProvider extends LocaleServiceProvider {
 

@@ -12,18 +12,18 @@ package org.elasticsearch.entitlement.qa.common;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.core.SuppressForbidden;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyBreakIteratorProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCalendarDataProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCalendarNameProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCollatorProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyCurrencyNameProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyDateFormatProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyDateFormatSymbolsProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyDecimalFormatSymbolsProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyLocaleNameProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyLocaleServiceProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyNumberFormatProvider;
-import org.elasticsearch.entitlement.qa.common.DummyLocaleProviders.DummyTimeZoneNameProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyBreakIteratorProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyCalendarDataProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyCalendarNameProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyCollatorProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyCurrencyNameProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyDateFormatProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyDateFormatSymbolsProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyDecimalFormatSymbolsProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyLocaleNameProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyLocaleServiceProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyNumberFormatProvider;
+import org.elasticsearch.entitlement.qa.common.DummyImplementations.DummyTimeZoneNameProvider;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.rest.BaseRestHandler;
@@ -33,8 +33,15 @@ import org.elasticsearch.rest.RestStatus;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.DatagramSocket;
+import java.net.DatagramSocketImpl;
+import java.net.DatagramSocketImplFactory;
+import java.net.HttpURLConnection;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.net.URLConnection;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +59,8 @@ import static org.elasticsearch.rest.RestRequest.Method.GET;
 
 public class RestEntitlementsCheckAction extends BaseRestHandler {
     private static final Logger logger = LogManager.getLogger(RestEntitlementsCheckAction.class);
+    public static final Thread NO_OP_SHUTDOWN_HOOK = new Thread(() -> {
+    });
     private final String prefix;
 
     record CheckAction(Runnable action, boolean isAlwaysDeniedToPlugins) {
@@ -155,15 +164,15 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
     }
 
     private static void runtime$addShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {}));
+        Runtime.getRuntime().addShutdownHook(NO_OP_SHUTDOWN_HOOK);
     }
 
     private static void runtime$$removeShutdownHook() {
-        Runtime.getRuntime().removeShutdownHook(new Thread(() -> {}));
+        Runtime.getRuntime().removeShutdownHook(NO_OP_SHUTDOWN_HOOK);
     }
 
     private static void thread$$setDefaultUncaughtExceptionHandler() {
-        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> { throw new IllegalStateException(throwable); });
+        Thread.setDefaultUncaughtExceptionHandler(Thread.getDefaultUncaughtExceptionHandler());
     }
 
     private static void localeServiceProvider$() {
@@ -215,27 +224,55 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
     }
 
     private static void logManager$() {
+        new java.util.logging.LogManager(){};
     }
 
+    @SuppressWarnings("deprecation")
     private static void datagramSocket$$setDatagramSocketImplFactory() {
+        try {
+            DatagramSocket.setDatagramSocketImplFactory(new DatagramSocketImplFactory(){
+                @Override
+                public DatagramSocketImpl createDatagramSocketImpl() {
+                    throw new IllegalStateException();
+                }
+            });
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static void httpURLConnection$$setFollowRedirects() {
+        HttpURLConnection.setFollowRedirects(HttpURLConnection.getFollowRedirects());
     }
 
+    @SuppressWarnings("deprecation")
     private static void serverSocket$$setSocketFactory() {
+        try {
+            ServerSocket.setSocketFactory(() ->{ throw new IllegalStateException(); });
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
+    @SuppressWarnings("deprecation")
     private static void socket$$setSocketImplFactory() {
+        try {
+            Socket.setSocketImplFactory(() ->{ throw new IllegalStateException(); });
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static void url$$setURLStreamHandlerFactory() {
+        URL.setURLStreamHandlerFactory(__ -> { throw new IllegalStateException(); });
     }
 
     private static void urlConnection$$setFileNameMap() {
+        URLConnection.setFileNameMap(__ -> { throw new IllegalStateException(); });
     }
 
     private static void urlConnection$$setContentHandlerFactory() {
+        URLConnection.setContentHandlerFactory(__ -> { throw new IllegalStateException(); });
     }
 
 
