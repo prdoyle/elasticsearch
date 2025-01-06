@@ -89,7 +89,7 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
             entry("runtime_halt", deniedToPlugins(RestEntitlementsCheckAction::runtimeHalt)),
             entry("processBuilder_start", deniedToPlugins(RestEntitlementsCheckAction::processBuilder_start)),
             entry("processBuilder_startPipeline", deniedToPlugins(RestEntitlementsCheckAction::processBuilder_startPipeline)),
-            entry("create_classloader", forPlugins(RestEntitlementsCheckAction::createClassLoader))
+            entry("create_classloader", forPlugins(RestEntitlementsCheckAction::createClassLoader)),
             entry("set_https_connection_properties", forPlugins(RestEntitlementsCheckAction::setHttpsConnectionProperties)),
             entry("set_default_ssl_socket_factory", alwaysDenied(RestEntitlementsCheckAction::setDefaultSSLSocketFactory)),
             entry("set_default_hostname_verifier", alwaysDenied(RestEntitlementsCheckAction::setDefaultHostnameVerifier)),
@@ -112,7 +112,7 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
             entry("currencyNameProvider", alwaysDenied(RestEntitlementsCheckAction::currencyNameProvider$)),
             entry("localeNameProvider", alwaysDenied(RestEntitlementsCheckAction::localeNameProvider$)),
             entry("timeZoneNameProvider", alwaysDenied(RestEntitlementsCheckAction::timeZoneNameProvider$)),
-//            entry("logManager", alwaysDenied(RestEntitlementsCheckAction::logManager$)),
+            entry("logManager", alwaysDenied(RestEntitlementsCheckAction::logManager$)),
 
             // This group is a bit nasty: if entitlements don't prevent these, then networking is
             // irreparably borked for the remainder of the test run.
@@ -122,7 +122,7 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
             entry("socket_setSocketImplFactory", alwaysDenied(RestEntitlementsCheckAction::socket$$setSocketImplFactory)),
             entry("url_setURLStreamHandlerFactory", alwaysDenied(RestEntitlementsCheckAction::url$$setURLStreamHandlerFactory)),
             entry("urlConnection_setFileNameMap", alwaysDenied(RestEntitlementsCheckAction::urlConnection$$setFileNameMap)),
-            entry("urlConnection_setContentHandlerFactory", alwaysDenied(RestEntitlementsCheckAction::urlConnection$$setContentHandlerFactory)),
+            entry("urlConnection_setContentHandlerFactory", alwaysDenied(RestEntitlementsCheckAction::urlConnection$$setContentHandlerFactory))
         );
     }
 

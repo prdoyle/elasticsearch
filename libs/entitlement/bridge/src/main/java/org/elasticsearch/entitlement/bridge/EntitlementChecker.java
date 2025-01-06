@@ -153,7 +153,7 @@ public interface EntitlementChecker {
     void check$java_util_spi_TimeZoneNameProvider$(Class<?> callerClass);
 
     // Can't call bridge
-//    void check$java_util_logging_LogManager$(Class<?> callerClass);
+    void check$java_util_logging_LogManager$(Class<?> callerClass);
 
     void check$java_net_DatagramSocket$$setDatagramSocketImplFactory(Class<?> callerClass, DatagramSocketImplFactory fac);
 
