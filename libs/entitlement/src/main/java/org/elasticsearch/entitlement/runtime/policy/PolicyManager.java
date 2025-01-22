@@ -162,17 +162,18 @@ public class PolicyManager {
     }
 
     public void checkChangeJVMGlobalState(Class<?> callerClass) {
-        neverEntitled(callerClass, () -> {
-            // Look up the check$ method to compose an informative error message.
-            // This way, we don't need to painstakingly describe every individual global-state change.
-            Optional<String> checkMethodName = StackWalker.getInstance()
-                .walk(
-                    frames -> frames.map(StackFrame::getMethodName)
-                        .dropWhile(not(methodName -> methodName.startsWith("check$")))
-                        .findFirst()
-                );
-            return checkMethodName.map(this::operationDescription).orElse("change JVM global state");
-        });
+        neverEntitled(callerClass, () -> walkStackForCheckMethodName().orElse("change JVM global state"));
+    }
+
+    private Optional<String> walkStackForCheckMethodName() {
+        // Look up the check$ method to compose an informative error message.
+        // This way, we don't need to painstakingly describe every individual global-state change.
+        return StackWalker.getInstance()
+            .walk(
+                frames -> frames.map(StackFrame::getMethodName)
+                    .dropWhile(not(methodName -> methodName.startsWith("check$")))
+                    .findFirst()
+            ).map(this::operationDescription);
     }
 
     /**
@@ -279,6 +280,10 @@ public class PolicyManager {
 
     public void checkSetThreadProperty(Class<?> callerClass) {
         checkEntitlementPresent(callerClass, SetThreadPropertyEntitlement.class);
+    }
+
+    public void checkDisruptiveThreadAction(Class<?> callerClass) {
+        neverEntitled(callerClass, ()-> walkStackForCheckMethodName().orElse("disruptive thread action"));
     }
 
     private void checkEntitlementPresent(Class<?> callerClass, Class<? extends Entitlement> entitlementClass) {

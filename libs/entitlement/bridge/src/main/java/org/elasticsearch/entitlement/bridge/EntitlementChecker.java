@@ -45,7 +45,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.TimeZone;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
@@ -429,34 +432,38 @@ public interface EntitlementChecker {
 
     void check$java_lang_Thread$setContextClassLoader(Class<?> callerClass, Thread thread, ClassLoader cl);
 
-    void check$java_lang_Thread$(Class<?> callerClass);
+//    void check$java_lang_Thread$(Class<?> callerClass);
+//
+//    void check$java_lang_Thread$(Class<?> callerClass, Runnable task);
+//
+//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task);
+//
+//    void check$java_lang_Thread$(Class<?> callerClass, String name);
+//
+//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name);
+//
+//    void check$java_lang_Thread$(Class<?> callerClass, Runnable task, String name);
+//
+//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name);
+//
+//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name, long stackSize);
+//
+//    void check$java_lang_Thread$(
+//        Class<?> callerClass,
+//        ThreadGroup group,
+//        Runnable task,
+//        String name,
+//        long stackSize,
+//        boolean inheritInheritableThreadLocals
+//    );
 
-    void check$java_lang_Thread$(Class<?> callerClass, Runnable task);
+    // TODO: This never matches
+    void check$java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted(Class<?> callerClass, Thread.Builder builder, Runnable task);
 
-    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task);
+    // TODO: This never matches
+    void check$java_lang_ThreadBuilders$PlatformThreadFactory$newThread(Class<?> callerClass, ThreadFactory threadFactory, Runnable task);
 
-    void check$java_lang_Thread$(Class<?> callerClass, String name);
-
-    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name);
-
-    void check$java_lang_Thread$(Class<?> callerClass, Runnable task, String name);
-
-    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name);
-
-    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name, long stackSize);
-
-    void check$java_lang_Thread$(
-        Class<?> callerClass,
-        ThreadGroup group,
-        Runnable task,
-        String name,
-        long stackSize,
-        boolean inheritInheritableThreadLocals
-    );
-
-    void check$java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted(Class<?> callerClass, Runnable task);
-
-    void check$java_lang_ThreadBuilders$PlatformThreadFactory$newThread(Class<?> callerClass, Runnable task);
+    void check$java_lang_ThreadGroup$(Class<?> callerClass, String name);
 
     void check$java_lang_ThreadGroup$(Class<?> callerClass, ThreadGroup parent, String name);
 
@@ -497,38 +504,41 @@ public interface EntitlementChecker {
 
     void check$java_util_concurrent_ForkJoinWorkerThread$(Class<?> callerClass, ForkJoinPool pool);
 
-    void check$java_lang_Thread$setDaemon(Class<?> callerClass, boolean on);
+    void check$java_lang_Thread$setDaemon(Class<?> callerClass, Thread thread, boolean on);
 
-    void check$java_lang_ThreadGroup$setDaemon(Class<?> callerClass, boolean daemon);
+    void check$java_lang_ThreadGroup$setDaemon(Class<?> callerClass, ThreadGroup threadGroup, boolean daemon);
 
-    void check$java_util_concurrent_ForkJoinPool$setParallelism(Class<?> callerClass, int size);
+    void check$java_util_concurrent_ForkJoinPool$setParallelism(Class<?> callerClass, ForkJoinPool forkJoinPool, int size);
 
-    void check$java_lang_Thread$interrupt(Class<?> callerClass);
+    void check$java_lang_Thread$interrupt(Class<?> callerClass, Thread thread);
 
-    void check$java_lang_ThreadGroup$interrupt(Class<?> callerClass);
+    void check$java_lang_ThreadGroup$interrupt(Class<?> callerClass, ThreadGroup threadGroup);
 
-    void check$java_util_concurrent_ForkJoinPool$close(Class<?> callerClass);
+    void check$java_util_concurrent_ForkJoinPool$close(Class<?> callerClass, ForkJoinPool forkJoinPool);
 
-    void check$java_util_concurrent_ForkJoinPool$shutdown(Class<?> callerClass);
+    void check$java_util_concurrent_ForkJoinPool$shutdown(Class<?> callerClass, ForkJoinPool forkJoinPool);
 
-    void check$java_util_concurrent_ForkJoinPool$shutdownNow(Class<?> callerClass);
+    void check$java_util_concurrent_ForkJoinPool$shutdownNow(Class<?> callerClass, ForkJoinPool forkJoinPool);
 
-    void check$java_util_concurrent_ThreadPerTaskExecutor$close(Class<?> callerClass);
+    // TODO: This never matches
+    void check$java_util_concurrent_ThreadPerTaskExecutor$close(Class<?> callerClass, Executor executor);
 
-    void check$java_util_concurrent_ThreadPerTaskExecutor$shutdown(Class<?> callerClass);
+    // TODO: This never matches
+    void check$java_util_concurrent_ThreadPerTaskExecutor$shutdown(Class<?> callerClass, Executor executor);
 
-    void check$java_util_concurrent_ThreadPerTaskExecutor$shutdownNow(Class<?> callerClass);
+    // TODO: This never matches
+    void check$java_util_concurrent_ThreadPerTaskExecutor$shutdownNow(Class<?> callerClass, Executor executor);
 
-    void check$java_util_concurrent_ThreadPoolExecutor$shutdown(Class<?> callerClass);
+    void check$java_util_concurrent_ThreadPoolExecutor$shutdown(Class<?> callerClass, ThreadPoolExecutor threadPoolExecutor);
 
-    void check$java_util_concurrent_ThreadPoolExecutor$shutdownNow(Class<?> callerClass);
+    void check$java_util_concurrent_ThreadPoolExecutor$shutdownNow(Class<?> callerClass, ThreadPoolExecutor threadPoolExecutor);
 
-    void check$java_lang_Thread$setName(Class<?> callerClass, String name);
+    void check$java_lang_Thread$setName(Class<?> callerClass, Thread thread, String name);
 
-    void check$java_lang_Thread$setPriority(Class<?> callerClass, int newPriority);
+    void check$java_lang_Thread$setPriority(Class<?> callerClass, Thread thread, int newPriority);
 
-    void check$java_lang_Thread$setUncaughtExceptionHandler(Class<?> callerClass, Thread.UncaughtExceptionHandler ueh);
+    void check$java_lang_Thread$setUncaughtExceptionHandler(Class<?> callerClass, Thread thread, Thread.UncaughtExceptionHandler ueh);
 
-    void check$java_lang_ThreadGroup$setMaxPriority(Class<?> callerClass, int pri);
+    void check$java_lang_ThreadGroup$setMaxPriority(Class<?> callerClass, ThreadGroup threadGroup, int pri);
 
 }
