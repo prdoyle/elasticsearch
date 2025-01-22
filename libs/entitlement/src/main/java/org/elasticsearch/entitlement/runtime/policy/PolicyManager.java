@@ -265,6 +265,22 @@ public class PolicyManager {
         );
     }
 
+    public void checkCreateThreadEntitlement(Class<?> callerClass) {
+        checkEntitlementPresent(callerClass, CreateThreadEntitlement.class);
+    }
+
+    public void checkInterruptThreadEntitlement(Class<?> callerClass) {
+        checkEntitlementPresent(callerClass, InterruptThreadEntitlement.class);
+    }
+
+    public void checkSetThreadContextClassLoader(Class<?> callerClass) {
+        checkEntitlementPresent(callerClass, SetThreadContextClassLoaderEntitlement.class);
+    }
+
+    public void checkSetThreadProperty(Class<?> callerClass) {
+        checkEntitlementPresent(callerClass, SetThreadPropertyEntitlement.class);
+    }
+
     private void checkEntitlementPresent(Class<?> callerClass, Class<? extends Entitlement> entitlementClass) {
         var requestingClass = requestingClass(callerClass);
         if (isTriviallyAllowed(requestingClass)) {
