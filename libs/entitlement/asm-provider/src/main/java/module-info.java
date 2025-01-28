@@ -13,6 +13,7 @@ import org.elasticsearch.entitlement.instrumentation.impl.InstrumentationService
 module org.elasticsearch.entitlement.instrumentation {
     requires org.objectweb.asm;
     requires org.elasticsearch.entitlement;
+    requires org.elasticsearch.logging;
 
     provides InstrumentationService with InstrumentationServiceImpl;
 }
