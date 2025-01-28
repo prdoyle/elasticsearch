@@ -34,7 +34,7 @@ import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toUnmodifiableMap;
 
 public class PolicyManager {
-    private static final Logger logger = LogManager.getLogger(PolicyManager.class);
+    public static final Logger logger = LogManager.getLogger(PolicyManager.class);
 
     record ModuleEntitlements(Map<Class<? extends Entitlement>, List<Entitlement>> entitlementsByType) {
         public static final ModuleEntitlements NONE = new ModuleEntitlements(Map.of());
@@ -304,7 +304,7 @@ public class PolicyManager {
             );
             return;
         }
-        throw new NotEntitledException(
+        NotEntitledException exception = new NotEntitledException(
             Strings.format(
                 "Missing entitlement: class [%s], module [%s], entitlement [%s]",
                 requestingClass,
@@ -312,6 +312,8 @@ public class PolicyManager {
                 PolicyParser.getEntitlementTypeName(entitlementClass)
             )
         );
+        logger.info("Entitlement denied", exception);
+        throw exception;
     }
 
     ModuleEntitlements getEntitlements(Class<?> requestingClass) {
@@ -401,18 +403,19 @@ public class PolicyManager {
      * @return true if permission is granted regardless of the entitlement
      */
     private static boolean isTriviallyAllowed(Class<?> requestingClass) {
-        if (logger.isTraceEnabled()) {
-            logger.trace("Stack trace for upcoming trivially-allowed check", new Exception());
-        }
         if (requestingClass == null) {
-            logger.debug("Entitlement trivially allowed: no caller frames outside the entitlement library");
+            logger.info("Entitlement trivially allowed: no caller frames outside the entitlement library", new Exception("STACK TRACE"));
             return true;
         }
         if (systemModules.contains(requestingClass.getModule())) {
-            logger.debug("Entitlement trivially allowed from system module [{}]", requestingClass.getModule().getName());
+            if (logger.isTraceEnabled()) {
+                logger.trace("Entitlement trivially allowed from system module [{}]", requestingClass.getModule().getName(), new Exception("STACK TRACE"));
+            }
             return true;
         }
-        logger.trace("Entitlement not trivially allowed");
+        if (logger.isTraceEnabled()) {
+            logger.trace("Entitlement not trivially allowed", new Exception("STACK TRACE"));
+        }
         return false;
     }
 

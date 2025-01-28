@@ -68,6 +68,7 @@ import javax.net.ssl.SSLContext;
 import static java.lang.Thread.currentThread;
 import static java.util.Map.entry;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.elasticsearch.entitlement.qa.entitled.EntitledActions.newThread;
 import static org.elasticsearch.entitlement.qa.test.RestEntitlementsCheckAction.CheckAction.alwaysDenied;
 import static org.elasticsearch.entitlement.qa.test.RestEntitlementsCheckAction.CheckAction.deniedToPlugins;
 import static org.elasticsearch.entitlement.qa.test.RestEntitlementsCheckAction.CheckAction.forPlugins;
@@ -76,7 +77,7 @@ import static org.elasticsearch.rest.RestRequest.Method.GET;
 @SuppressWarnings("unused")
 public class RestEntitlementsCheckAction extends BaseRestHandler {
     private static final Logger logger = LogManager.getLogger(RestEntitlementsCheckAction.class);
-    public static final Thread NO_OP_SHUTDOWN_HOOK = new Thread(() -> {}, "Shutdown hook for testing");
+    public static final Thread NO_OP_SHUTDOWN_HOOK = newThread(() -> {}, "Shutdown hook for testing");
 
     record CheckAction(CheckedRunnable<Exception> action, boolean isAlwaysDeniedToPlugins, Integer fromJavaVersion) {
         /**
@@ -209,35 +210,35 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
         entry("system_load_library", forPlugins(LoadNativeLibrariesCheckActions::systemLoadLibrary)),
 
         entry("java_lang_Thread$setContextClassLoader", forPlugins(RestEntitlementsCheckAction::java_lang_Thread$setContextClassLoader)),
-//        entry("java_lang_Thread$_1", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_1)),
+        entry("java_lang_Thread$_1", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_1)),
 //        entry("java_lang_Thread$_2", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_2)),
-//        entry("java_lang_Thread$_3", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_3)),
-//        entry("java_lang_Thread$_4", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_4)),
+        entry("java_lang_Thread$_3", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_3)),
+        entry("java_lang_Thread$_4", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_4)),
 //        entry("java_lang_Thread$_5", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_5)),
-//        entry("java_lang_Thread$_6", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_6)),
-//        entry("java_lang_Thread$_7", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_7)),
-//        entry("java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted)),
-//        entry("java_lang_ThreadBuilders$PlatformThreadFactory$newThread", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadBuilders$PlatformThreadFactory$newThread)),
+        entry("java_lang_Thread$_6", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_6)),
+        entry("java_lang_Thread$_7", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_7)),
+        entry("java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted)),
+        entry("java_lang_ThreadBuilders$PlatformThreadFactory$newThread", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadBuilders$PlatformThreadFactory$newThread)),
         entry("java_lang_ThreadGroup$_1", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadGroup$_1)),
         entry("java_lang_ThreadGroup$_2", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadGroup$_2)),
         entry("java_util_concurrent_ForkJoinPool$_1", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$_1)),
         entry("java_util_concurrent_ForkJoinPool$_2", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$_2)),
         entry("java_util_concurrent_ForkJoinPool$_3", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$_3)),
         entry("java_util_concurrent_ForkJoinPool$_4", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$_4)),
-//        entry("java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread)),
+        entry("java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread)),
         entry("java_util_concurrent_ForkJoinWorkerThread$_1", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinWorkerThread$_1)),
-        entry("java_util_concurrent_ForkJoinWorkerThread$_2", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinWorkerThread$_2)),
+//        entry("java_util_concurrent_ForkJoinWorkerThread$_2", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinWorkerThread$_2)),
         entry("java_lang_Thread$setDaemon", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$setDaemon)),
         entry("java_lang_ThreadGroup$setDaemon", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadGroup$setDaemon)),
-//        entry("java_util_concurrent_ForkJoinPool$setParallelism", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$setParallelism)),
+        entry("java_util_concurrent_ForkJoinPool$setParallelism", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$setParallelism)),
         entry("java_lang_Thread$interrupt", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$interrupt)),
         entry("java_lang_ThreadGroup$interrupt", alwaysDenied(RestEntitlementsCheckAction::java_lang_ThreadGroup$interrupt)),
         entry("java_util_concurrent_ForkJoinPool$close", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$close)),
         entry("java_util_concurrent_ForkJoinPool$shutdown", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$shutdown)),
         entry("java_util_concurrent_ForkJoinPool$shutdownNow", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinPool$shutdownNow)),
-//        entry("java_util_concurrent_ThreadPerTaskExecutor$close", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPerTaskExecutor$close)),
-//        entry("java_util_concurrent_ThreadPerTaskExecutor$shutdown", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPerTaskExecutor$shutdown)),
-//        entry("java_util_concurrent_ThreadPerTaskExecutor$shutdownNow", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPerTaskExecutor$shutdownNow)),
+        entry("java_util_concurrent_ThreadPerTaskExecutor$close", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPerTaskExecutor$close)),
+        entry("java_util_concurrent_ThreadPerTaskExecutor$shutdown", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPerTaskExecutor$shutdown)),
+        entry("java_util_concurrent_ThreadPerTaskExecutor$shutdownNow", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPerTaskExecutor$shutdownNow)),
         entry("java_util_concurrent_ThreadPoolExecutor$shutdown", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPoolExecutor$shutdown)),
         entry("java_util_concurrent_ThreadPoolExecutor$shutdownNow", deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ThreadPoolExecutor$shutdownNow)),
         entry("java_lang_Thread$setName", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$setName)),
@@ -525,6 +526,7 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
         return channel -> {
             logger.info("Calling check action [{}]", actionName);
             checkAction.action().run();
+            logger.debug("Check action [{}] returned", actionName);
             channel.sendResponse(new RestResponse(RestStatus.OK, Strings.format("Succesfully executed action [%s]", actionName)));
         };
     }
@@ -578,16 +580,17 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
         try (var __ = new ForkJoinPool(1, null, null, false)) { }
     }
     static void java_util_concurrent_ForkJoinPool$_4() {
-        try (var __ = new ForkJoinPool(1, null, null, false, 1, 1, 1, ___ -> false, 1, SECONDS)) { }
+        try (var __ = new ForkJoinPool(1, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, false, 1, 1, 1, ___ -> false, 1, SECONDS)) { }
     }
     static void java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread() {
-        ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(null);
+        System.out.println("HEY factory is " + ForkJoinPool.defaultForkJoinWorkerThreadFactory.getClass().getName().replace('.','_'));
+        ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(ForkJoinPool.commonPool());
     }
     static void java_util_concurrent_ForkJoinWorkerThread$_1() {
-        new ForkJoinWorkerThread(null) {};
+        new ForkJoinWorkerThread(ForkJoinPool.commonPool()) {};
     }
     static void java_util_concurrent_ForkJoinWorkerThread$_2() {
-        new ForkJoinWorkerThread(currentThread().getThreadGroup(), null, false) {};
+        new ForkJoinWorkerThread(currentThread().getThreadGroup(), ForkJoinPool.commonPool(), false) {};
     }
     static void java_lang_Thread$setDaemon() {
         currentThread().setDaemon(currentThread().isDaemon());
@@ -596,7 +599,7 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
         currentThread().getThreadGroup().setDaemon(currentThread().getThreadGroup().isDaemon());
     }
     static void java_util_concurrent_ForkJoinPool$setParallelism() {
-        // TODO
+        ForkJoinPool.commonPool().setParallelism(ForkJoinPool.commonPool().getParallelism());
     }
     static void java_lang_Thread$interrupt() {
         currentThread().interrupt();

@@ -781,22 +781,22 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
         policyManager.checkSetThreadContextClassLoader(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(Class<?> callerClass) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(Class<?> callerClass, Runnable task) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(Class<?> callerClass, String name) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
@@ -806,22 +806,22 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(Class<?> callerClass, Runnable task, String name) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name, long stackSize) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    @Override
     public void check$java_lang_Thread$(
         Class<?> callerClass,
         ThreadGroup group,
@@ -894,8 +894,10 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
     @Override
     public void check$java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread(
         Class<?> callerClass,
+        ForkJoinPool.ForkJoinWorkerThreadFactory factory,
         ForkJoinPool pool
     ) {
+        System.out.println("About to check entitlement of " + callerClass.getName().replace('/','_'));
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 

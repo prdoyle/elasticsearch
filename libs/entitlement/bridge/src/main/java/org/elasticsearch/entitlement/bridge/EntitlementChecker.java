@@ -432,35 +432,34 @@ public interface EntitlementChecker {
 
     void check$java_lang_Thread$setContextClassLoader(Class<?> callerClass, Thread thread, ClassLoader cl);
 
-//    void check$java_lang_Thread$(Class<?> callerClass);
-//
-//    void check$java_lang_Thread$(Class<?> callerClass, Runnable task);
-//
-//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task);
-//
-//    void check$java_lang_Thread$(Class<?> callerClass, String name);
-//
-//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name);
-//
-//    void check$java_lang_Thread$(Class<?> callerClass, Runnable task, String name);
-//
-//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name);
-//
-//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name, long stackSize);
-//
-//    void check$java_lang_Thread$(
-//        Class<?> callerClass,
-//        ThreadGroup group,
-//        Runnable task,
-//        String name,
-//        long stackSize,
-//        boolean inheritInheritableThreadLocals
-//    );
+    void check$java_lang_Thread$(Class<?> callerClass);
 
-    // TODO: This never matches
+    void check$java_lang_Thread$(Class<?> callerClass, Runnable task);
+
+    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task);
+
+    void check$java_lang_Thread$(Class<?> callerClass, String name);
+
+    // TODO: Causes mysterious test failure even if the check does nothing
+//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name);
+
+    void check$java_lang_Thread$(Class<?> callerClass, Runnable task, String name);
+
+    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name);
+
+    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, Runnable task, String name, long stackSize);
+
+    void check$java_lang_Thread$(
+        Class<?> callerClass,
+        ThreadGroup group,
+        Runnable task,
+        String name,
+        long stackSize,
+        boolean inheritInheritableThreadLocals
+    );
+
     void check$java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted(Class<?> callerClass, Thread.Builder builder, Runnable task);
 
-    // TODO: This never matches
     void check$java_lang_ThreadBuilders$PlatformThreadFactory$newThread(Class<?> callerClass, ThreadFactory threadFactory, Runnable task);
 
     void check$java_lang_ThreadGroup$(Class<?> callerClass, String name);
@@ -493,7 +492,7 @@ public interface EntitlementChecker {
         TimeUnit unit
     );
 
-    void check$java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread(Class<?> callerClass, ForkJoinPool pool);
+    void check$java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread(Class<?> callerClass, ForkJoinPool.ForkJoinWorkerThreadFactory factory, ForkJoinPool pool);
 
     void check$java_util_concurrent_ForkJoinWorkerThread$(
         Class<?> callerClass,
@@ -520,13 +519,10 @@ public interface EntitlementChecker {
 
     void check$java_util_concurrent_ForkJoinPool$shutdownNow(Class<?> callerClass, ForkJoinPool forkJoinPool);
 
-    // TODO: This never matches
     void check$java_util_concurrent_ThreadPerTaskExecutor$close(Class<?> callerClass, Executor executor);
 
-    // TODO: This never matches
     void check$java_util_concurrent_ThreadPerTaskExecutor$shutdown(Class<?> callerClass, Executor executor);
 
-    // TODO: This never matches
     void check$java_util_concurrent_ThreadPerTaskExecutor$shutdownNow(Class<?> callerClass, Executor executor);
 
     void check$java_util_concurrent_ThreadPoolExecutor$shutdown(Class<?> callerClass, ThreadPoolExecutor threadPoolExecutor);

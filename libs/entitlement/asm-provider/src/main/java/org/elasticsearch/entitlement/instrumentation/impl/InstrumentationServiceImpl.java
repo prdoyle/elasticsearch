@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static java.util.stream.Collectors.joining;
+
 public class InstrumentationServiceImpl implements InstrumentationService {
 
     @Override
@@ -61,6 +63,7 @@ public class InstrumentationServiceImpl implements InstrumentationService {
             }
         };
         reader.accept(visitor, 0);
+        System.out.println("Instrumented methods:\n" + methodsToInstrument.entrySet().stream().map(Map.Entry::toString).collect(joining("\n")));
         return methodsToInstrument;
     }
 
