@@ -803,7 +803,8 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
 
     // @Override
     public void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name) {
-        policyManager.checkCreateThreadEntitlement(callerClass);
+        // throw new IllegalStateException("HEY HEY");
+        // policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
     @Override

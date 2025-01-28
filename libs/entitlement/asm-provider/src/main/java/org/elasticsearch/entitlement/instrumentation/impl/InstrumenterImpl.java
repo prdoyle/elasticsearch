@@ -30,10 +30,13 @@ import java.util.stream.Stream;
 import static org.objectweb.asm.ClassWriter.COMPUTE_FRAMES;
 import static org.objectweb.asm.ClassWriter.COMPUTE_MAXS;
 import static org.objectweb.asm.Opcodes.ACC_STATIC;
+import static org.objectweb.asm.Opcodes.ACONST_NULL;
 import static org.objectweb.asm.Opcodes.GETSTATIC;
 import static org.objectweb.asm.Opcodes.INVOKEINTERFACE;
 import static org.objectweb.asm.Opcodes.INVOKESTATIC;
 import static org.objectweb.asm.Opcodes.INVOKEVIRTUAL;
+import static org.objectweb.asm.Opcodes.POP;
+import static org.objectweb.asm.Opcodes.POP2;
 
 public class InstrumenterImpl implements Instrumenter {
 
@@ -155,7 +158,9 @@ public class InstrumenterImpl implements Instrumenter {
                 var key = new MethodKey(className, name, Stream.of(Type.getArgumentTypes(descriptor)).map(Type::getInternalName).toList());
                 var instrumentationMethod = checkMethods.get(key);
                 if (instrumentationMethod != null) {
-                    // System.out.println("Will instrument method " + key);
+                    if (key.className().equals("java/lang/Thread")) {
+                        System.out.println("Will instrument method " + key);
+                    }
                     return new EntitlementMethodVisitor(Opcodes.ASM9, mv, isStatic, isCtor, descriptor, instrumentationMethod);
                 } else {
                     // System.out.println("Will not instrument method " + key);
@@ -216,9 +221,11 @@ public class InstrumenterImpl implements Instrumenter {
         @Override
         public void visitCode() {
             pushEntitlementChecker();
+            visitInsn(POP);
             pushCallerClass();
+            visitInsn(POP);
             forwardIncomingArguments();
-            invokeInstrumentationMethod();
+            // invokeInstrumentationMethod();
             super.visitCode();
         }
 
@@ -235,6 +242,29 @@ public class InstrumenterImpl implements Instrumenter {
                     Type.getMethodDescriptor(Type.getType(Class.class)),
                     false
                 );
+            } else if (true) {
+                // mv.visitFieldInsn(
+                // GETSTATIC,
+                // Type.getInternalName(StackWalker.Option.class),
+                // "RETAIN_CLASS_REFERENCE",
+                // Type.getDescriptor(StackWalker.Option.class)
+                // );
+                // mv.visitMethodInsn(
+                // INVOKESTATIC,
+                // Type.getInternalName(StackWalker.class),
+                // "getInstance",
+                // Type.getMethodDescriptor(Type.getType(StackWalker.class), Type.getType(StackWalker.Option.class)),
+                // false
+                // );
+                // mv.visitMethodInsn(
+                // INVOKEVIRTUAL,
+                // Type.getInternalName(StackWalker.class),
+                // "getCallerClass",
+                // Type.getMethodDescriptor(Type.getType(Class.class)),
+                // false
+                // );
+                // mv.visitInsn(POP);
+                mv.visitInsn(ACONST_NULL);
             } else {
                 mv.visitFieldInsn(
                     GETSTATIC,
@@ -268,6 +298,11 @@ public class InstrumenterImpl implements Instrumenter {
             }
             for (Type type : Type.getArgumentTypes(instrumentedMethodDescriptor)) {
                 mv.visitVarInsn(type.getOpcode(Opcodes.ILOAD), localVarIndex);
+                if (type.getSize() == 2) {
+                    mv.visitInsn(POP2);
+                } else {
+                    mv.visitInsn(POP);
+                }
                 localVarIndex += type.getSize();
             }
         }

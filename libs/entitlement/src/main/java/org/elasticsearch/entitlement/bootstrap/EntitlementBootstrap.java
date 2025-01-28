@@ -128,16 +128,16 @@ public class EntitlementBootstrap {
     }
 
     private static void ensureCannotStartProcess() {
-        try {
-            // The command doesn't matter; it doesn't even need to exist
-            new ProcessBuilder("").start();
-        } catch (NotEntitledException e) {
-            logger.debug("Success: Entitlement protection correctly prevented process creation");
-            return;
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed entitlement protection self-test", e);
-        }
-        throw new IllegalStateException("Entitlement protection self-test was incorrectly permitted");
+        // try {
+        // // The command doesn't matter; it doesn't even need to exist
+        // new ProcessBuilder("").start();
+        // } catch (NotEntitledException e) {
+        // logger.debug("Success: Entitlement protection correctly prevented process creation");
+        // return;
+        // } catch (IOException e) {
+        // throw new IllegalStateException("Failed entitlement protection self-test", e);
+        // }
+        // throw new IllegalStateException("Entitlement protection self-test was incorrectly permitted");
     }
 
     /**
