@@ -75,11 +75,13 @@ public class PolicyParser {
         this(inputStream, policyName, isExternalPlugin, validateExternalEntitlements(EXTERNAL_ENTITLEMENTS));
     }
 
-    private static Map<String, Class<? extends Entitlement>> validateExternalEntitlements(Map<String, Class<? extends Entitlement>> externalEntitlements) {
+    private static Map<String, Class<? extends Entitlement>> validateExternalEntitlements(
+        Map<String, Class<? extends Entitlement>> externalEntitlements
+    ) {
         externalEntitlements.forEach((name, type) -> {
-            assert name.equals(getEntitlementTypeName(type)):
-                "Map key for " + type + " must be [" + getEntitlementTypeName(type) + "] but was [" + name + "]";
-            for (var c: type.getConstructors()) {
+            assert name.equals(getEntitlementTypeName(type))
+                : "Map key for " + type + " must be [" + getEntitlementTypeName(type) + "] but was [" + name + "]";
+            for (var c : type.getConstructors()) {
                 if (c.isAnnotationPresent(ExternalEntitlement.class)) {
                     // All is well
                     return;
@@ -91,8 +93,12 @@ public class PolicyParser {
     }
 
     // package private for tests
-    PolicyParser(InputStream inputStream, String policyName, boolean isExternalPlugin, Map<String, Class<? extends Entitlement>> externalEntitlements)
-        throws IOException {
+    PolicyParser(
+        InputStream inputStream,
+        String policyName,
+        boolean isExternalPlugin,
+        Map<String, Class<? extends Entitlement>> externalEntitlements
+    ) throws IOException {
         this.policyParser = YamlXContent.yamlXContent.createParser(XContentParserConfiguration.EMPTY, Objects.requireNonNull(inputStream));
         this.policyName = policyName;
         this.isExternalPlugin = isExternalPlugin;

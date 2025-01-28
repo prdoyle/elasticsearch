@@ -169,11 +169,8 @@ public class PolicyManager {
         // Look up the check$ method to compose an informative error message.
         // This way, we don't need to painstakingly describe every individual global-state change.
         return StackWalker.getInstance()
-            .walk(
-                frames -> frames.map(StackFrame::getMethodName)
-                    .dropWhile(not(methodName -> methodName.startsWith("check$")))
-                    .findFirst()
-            ).map(this::operationDescription);
+            .walk(frames -> frames.map(StackFrame::getMethodName).dropWhile(not(methodName -> methodName.startsWith("check$"))).findFirst())
+            .map(this::operationDescription);
     }
 
     /**
@@ -283,7 +280,7 @@ public class PolicyManager {
     }
 
     public void checkDisruptiveThreadAction(Class<?> callerClass) {
-        neverEntitled(callerClass, ()-> walkStackForCheckMethodName().orElse("disruptive thread action"));
+        neverEntitled(callerClass, () -> walkStackForCheckMethodName().orElse("disruptive thread action"));
     }
 
     private void checkEntitlementPresent(Class<?> callerClass, Class<? extends Entitlement> entitlementClass) {
@@ -410,7 +407,11 @@ public class PolicyManager {
         }
         if (systemModules.contains(requestingClass.getModule())) {
             if (logger.isTraceEnabled()) {
-                logger.trace("Entitlement trivially allowed from system module [{}]", requestingClass.getModule().getName(), new Exception("STACK TRACE"));
+                logger.trace(
+                    "Entitlement trivially allowed from system module [{}]",
+                    requestingClass.getModule().getName(),
+                    new Exception("STACK TRACE")
+                );
             }
             return true;
         }

@@ -801,7 +801,7 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
-//    @Override
+    // @Override
     public void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
@@ -834,12 +834,20 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
     }
 
     @Override
-    public void check$java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted(Class<?> callerClass, Thread.Builder builder, Runnable task) {
+    public void check$java_lang_ThreadBuilders$PlatformThreadBuilder$unstarted(
+        Class<?> callerClass,
+        Thread.Builder builder,
+        Runnable task
+    ) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
     @Override
-    public void check$java_lang_ThreadBuilders$PlatformThreadFactory$newThread(Class<?> callerClass, ThreadFactory threadFactory, Runnable task) {
+    public void check$java_lang_ThreadBuilders$PlatformThreadFactory$newThread(
+        Class<?> callerClass,
+        ThreadFactory threadFactory,
+        Runnable task
+    ) {
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 
@@ -993,7 +1001,11 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
     }
 
     @Override
-    public void check$java_lang_Thread$setUncaughtExceptionHandler(Class<?> callerClass, Thread thread, Thread.UncaughtExceptionHandler ueh) {
+    public void check$java_lang_Thread$setUncaughtExceptionHandler(
+        Class<?> callerClass,
+        Thread thread,
+        Thread.UncaughtExceptionHandler ueh
+    ) {
         policyManager.checkSetThreadProperty(callerClass);
     }
 

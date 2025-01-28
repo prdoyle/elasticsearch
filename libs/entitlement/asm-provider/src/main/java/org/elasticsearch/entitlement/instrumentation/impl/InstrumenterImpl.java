@@ -155,10 +155,10 @@ public class InstrumenterImpl implements Instrumenter {
                 var key = new MethodKey(className, name, Stream.of(Type.getArgumentTypes(descriptor)).map(Type::getInternalName).toList());
                 var instrumentationMethod = checkMethods.get(key);
                 if (instrumentationMethod != null) {
-//                     System.out.println("Will instrument method " + key);
+                    // System.out.println("Will instrument method " + key);
                     return new EntitlementMethodVisitor(Opcodes.ASM9, mv, isStatic, isCtor, descriptor, instrumentationMethod);
                 } else {
-//                     System.out.println("Will not instrument method " + key);
+                    // System.out.println("Will not instrument method " + key);
                 }
             }
             return mv;

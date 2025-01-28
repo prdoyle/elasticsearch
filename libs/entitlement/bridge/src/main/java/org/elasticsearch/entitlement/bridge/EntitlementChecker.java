@@ -441,7 +441,7 @@ public interface EntitlementChecker {
     void check$java_lang_Thread$(Class<?> callerClass, String name);
 
     // TODO: Causes mysterious test failure even if the check does nothing
-//    void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name);
+    // void check$java_lang_Thread$(Class<?> callerClass, ThreadGroup group, String name);
 
     void check$java_lang_Thread$(Class<?> callerClass, Runnable task, String name);
 
@@ -492,7 +492,11 @@ public interface EntitlementChecker {
         TimeUnit unit
     );
 
-    void check$java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread(Class<?> callerClass, ForkJoinPool.ForkJoinWorkerThreadFactory factory, ForkJoinPool pool);
+    void check$java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread(
+        Class<?> callerClass,
+        ForkJoinPool.ForkJoinWorkerThreadFactory factory,
+        ForkJoinPool pool
+    );
 
     void check$java_util_concurrent_ForkJoinWorkerThread$(
         Class<?> callerClass,
