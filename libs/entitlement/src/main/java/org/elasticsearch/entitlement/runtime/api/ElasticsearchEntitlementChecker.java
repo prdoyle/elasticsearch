@@ -897,7 +897,6 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
         ForkJoinPool.ForkJoinWorkerThreadFactory factory,
         ForkJoinPool pool
     ) {
-        System.out.println("About to check entitlement of " + callerClass.getName().replace('/','_'));
         policyManager.checkCreateThreadEntitlement(callerClass);
     }
 

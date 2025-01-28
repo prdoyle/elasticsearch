@@ -34,7 +34,7 @@ import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toUnmodifiableMap;
 
 public class PolicyManager {
-    public static final Logger logger = LogManager.getLogger(PolicyManager.class);
+    private static final Logger logger = LogManager.getLogger(PolicyManager.class);
 
     record ModuleEntitlements(Map<Class<? extends Entitlement>, List<Entitlement>> entitlementsByType) {
         public static final ModuleEntitlements NONE = new ModuleEntitlements(Map.of());
@@ -312,7 +312,7 @@ public class PolicyManager {
                 PolicyParser.getEntitlementTypeName(entitlementClass)
             )
         );
-        logger.info("Entitlement denied", exception);
+        logger.debug("Entitlement denied", exception);
         throw exception;
     }
 
@@ -404,6 +404,7 @@ public class PolicyManager {
      */
     private static boolean isTriviallyAllowed(Class<?> requestingClass) {
         if (requestingClass == null) {
+            // This is unexpected and unusual; we probably want to log at the info level
             logger.info("Entitlement trivially allowed: no caller frames outside the entitlement library", new Exception("STACK TRACE"));
             return true;
         }

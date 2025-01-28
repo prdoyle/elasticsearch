@@ -583,7 +583,6 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
         try (var __ = new ForkJoinPool(1, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, false, 1, 1, 1, ___ -> false, 1, SECONDS)) { }
     }
     static void java_util_concurrent_ForkJoinPool$DefaultForkJoinWorkerThreadFactory$newThread() {
-        System.out.println("HEY factory is " + ForkJoinPool.defaultForkJoinWorkerThreadFactory.getClass().getName().replace('.','_'));
         ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(ForkJoinPool.commonPool());
     }
     static void java_util_concurrent_ForkJoinWorkerThread$_1() {
