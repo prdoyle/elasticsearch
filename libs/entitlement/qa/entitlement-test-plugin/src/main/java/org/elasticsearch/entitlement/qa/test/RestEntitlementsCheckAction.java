@@ -211,10 +211,10 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
 
         entry("java_lang_Thread$setContextClassLoader", forPlugins(RestEntitlementsCheckAction::java_lang_Thread$setContextClassLoader)),
         entry("java_lang_Thread$_1", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_1)),
-        // entry("java_lang_Thread$_2", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_2)),
+        entry("java_lang_Thread$_2", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_2)),
         entry("java_lang_Thread$_3", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_3)),
         entry("java_lang_Thread$_4", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_4)),
-        // entry("java_lang_Thread$_5", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_5)),
+        // entry("java_lang_Thread$_5", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_5)), // This check is not yet active
         entry("java_lang_Thread$_6", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_6)),
         entry("java_lang_Thread$_7", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$_7)),
         entry(
@@ -239,8 +239,10 @@ public class RestEntitlementsCheckAction extends BaseRestHandler {
             "java_util_concurrent_ForkJoinWorkerThread$_1",
             deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinWorkerThread$_1)
         ),
-        // entry("java_util_concurrent_ForkJoinWorkerThread$_2",
-        // deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinWorkerThread$_2)),
+        entry(
+            "java_util_concurrent_ForkJoinWorkerThread$_2",
+            deniedToPlugins(RestEntitlementsCheckAction::java_util_concurrent_ForkJoinWorkerThread$_2)
+        ),
         entry("java_lang_Thread$setDaemon", deniedToPlugins(RestEntitlementsCheckAction::java_lang_Thread$setDaemon)),
         entry("java_lang_ThreadGroup$setDaemon", deniedToPlugins(RestEntitlementsCheckAction::java_lang_ThreadGroup$setDaemon)),
         entry(
