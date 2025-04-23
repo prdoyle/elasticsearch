@@ -38,6 +38,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.elasticsearch.health.HealthStatus.YELLOW;
 import static org.elasticsearch.indices.recovery.RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING;
 import static org.elasticsearch.node.Node.INITIAL_STATE_TIMEOUT_SETTING;
 import static org.elasticsearch.test.NodeRoles.dataOnlyNode;
@@ -496,6 +497,36 @@ public class FileSettingsServiceIT extends ESIntegTestCase {
         writeJSONFile(internalCluster().getMasterName(), testJSON43mb, logger, versionCounter.incrementAndGet());
 
         assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), "43mb");
+    }
+
+    public void testHealthIndicator() throws Exception {
+        internalCluster().setBootstrapMasterNodeIndex(0);
+        logger.info("--> start a second node to act as the health node");
+        String dataNode = internalCluster().startNode(Settings.builder().put(dataOnlyNode()).put("discovery.initial_state_timeout", "1s"));
+        FileSettingsService dataFileSettingsService = internalCluster().getInstance(FileSettingsService.class, dataNode);
+
+        // Note that we assume the data node is the health node
+        // TODO: Can we do better?
+        var actualHealthIndicatorService = dataFileSettingsService.healthIndicatorService();
+
+        logger.info("--> start master node");
+        final String masterNode = internalCluster().startMasterOnlyNode(
+            Settings.builder().put(INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()
+        );
+        FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
+        var masterHealthIndicatorService = masterFileSettingsService.healthIndicatorService();
+        assertBusy(() -> assertTrue(masterFileSettingsService.watching()));
+
+        logger.info("--> induce an error and wait for it to be processed");
+        var savedClusterState = setupClusterStateListenerForError(masterNode);
+        writeJSONFile(masterNode, testErrorJSON, logger, versionCounter.incrementAndGet());
+        boolean awaitSuccessful = savedClusterState.v1().await(20, TimeUnit.SECONDS);
+        assertTrue(awaitSuccessful);
+        logger.info("--> verify that the node encountering the error reports it");
+        assertBusy(() -> assertEquals(YELLOW, masterHealthIndicatorService.calculate(false, null).status()));
+
+        logger.info("--> ensure the health node also reports it");
+        assertBusy(() -> assertEquals(YELLOW, actualHealthIndicatorService.calculate(false, null).status()));
     }
 
     private void assertHasErrors(AtomicLong waitForMetadataVersion, String expectedError) {
