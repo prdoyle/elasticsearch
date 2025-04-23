@@ -96,7 +96,7 @@ public class FileSettingsServiceTests extends ESTestCase {
     private FileSettingsHealthIndicatorService healthIndicatorService;
     private Path watchedFile;
 
-    public static final FileSettingsHealthIndicatorPublisher NOOP_PUBLISHER = (f, a) -> { };
+    public static final FileSettingsHealthIndicatorPublisher NOOP_PUBLISHER = (f, a) -> {};
 
     @Before
     public void setUp() throws Exception {

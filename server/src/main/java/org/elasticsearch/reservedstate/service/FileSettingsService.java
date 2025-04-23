@@ -260,22 +260,15 @@ public class FileSettingsService extends MasterNodeFileWatchingService implement
         completion.get();
     }
 
-    public record FileSettingsHealthInfo(
-        boolean isActive,
-        long changeCount,
-        long failureStreak,
-        String mostRecentFailure
-    ) implements Writeable {
+    public record FileSettingsHealthInfo(boolean isActive, long changeCount, long failureStreak, String mostRecentFailure)
+        implements
+            Writeable {
+
         public static final FileSettingsHealthInfo INITIAL_INACTIVE = new FileSettingsHealthInfo(false, 0L, 0, null);
         public static final FileSettingsHealthInfo INITIAL_ACTIVE = new FileSettingsHealthInfo(true, 0L, 0, null);
 
         public FileSettingsHealthInfo(StreamInput in) throws IOException {
-            this(
-                in.readBoolean(),
-                in.readVLong(),
-                in.readVLong(),
-                in.readOptionalString()
-            );
+            this(in.readBoolean(), in.readVLong(), in.readVLong(), in.readOptionalString());
         }
 
         @Override
@@ -394,7 +387,9 @@ public class FileSettingsService extends MasterNodeFileWatchingService implement
                 return createIndicator(
                     YELLOW,
                     FAILURE_SYMPTOM,
-                    new SimpleHealthIndicatorDetails(Map.of("failure_streak", currentInfo.failureStreak(), "most_recent_failure", currentInfo.mostRecentFailure())),
+                    new SimpleHealthIndicatorDetails(
+                        Map.of("failure_streak", currentInfo.failureStreak(), "most_recent_failure", currentInfo.mostRecentFailure())
+                    ),
                     STALE_SETTINGS_IMPACT,
                     List.of()
                 );
@@ -414,8 +409,10 @@ public class FileSettingsService extends MasterNodeFileWatchingService implement
         public void publish(FileSettingsHealthInfo info, ActionListener<AcknowledgedResponse> actionListener) {
             DiscoveryNode currentHealthNode = HealthNode.findHealthNode(clusterService.state());
             if (currentHealthNode == null) {
-                logger.trace("Unable to report file settings health because there is no health node in the cluster;" +
-                    " will retry next time file settings health changes.");
+                logger.trace(
+                    "Unable to report file settings health because there is no health node in the cluster;"
+                        + " will retry next time file settings health changes."
+                );
             } else {
                 client.execute(
                     UpdateHealthInfoCacheAction.INSTANCE,

@@ -112,7 +112,10 @@ public class FileSettingsHealthIndicatorServiceTests extends ESTestCase {
     }
 
     private void checkTruncatedDescription(int lengthLimit, String description, String expectedTruncatedDescription) {
-        var service = new FileSettingsHealthIndicatorService(Settings.builder().put(DESCRIPTION_LENGTH_LIMIT_KEY, lengthLimit).build(), NOOP_PUBLISHER);
+        var service = new FileSettingsHealthIndicatorService(
+            Settings.builder().put(DESCRIPTION_LENGTH_LIMIT_KEY, lengthLimit).build(),
+            NOOP_PUBLISHER
+        );
         service.startOccurred();
         service.changeOccurred();
         service.failureOccurred(description);
