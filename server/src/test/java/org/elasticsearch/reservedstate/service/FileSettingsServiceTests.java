@@ -96,6 +96,8 @@ public class FileSettingsServiceTests extends ESTestCase {
     private FileSettingsHealthIndicatorService healthIndicatorService;
     private Path watchedFile;
 
+    public static final FileSettingsHealthIndicatorPublisher NOOP_PUBLISHER = (f, a) -> { };
+
     @Before
     public void setUp() throws Exception {
         super.setUp();
@@ -141,7 +143,7 @@ public class FileSettingsServiceTests extends ESTestCase {
                 List.of()
             )
         );
-        healthIndicatorService = spy(new FileSettingsHealthIndicatorService(Settings.EMPTY));
+        healthIndicatorService = spy(new FileSettingsHealthIndicatorService(Settings.EMPTY, NOOP_PUBLISHER));
         fileSettingsService = spy(new FileSettingsService(clusterService, controller, env, healthIndicatorService));
         watchedFile = fileSettingsService.watchedFile();
     }
