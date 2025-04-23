@@ -214,12 +214,16 @@ public class FileSettingsService extends MasterNodeFileWatchingService implement
     }
 
     protected void completeProcessing(Exception e, PlainActionFuture<Void> completion) {
-        if (e != null) {
-            healthIndicatorService.failureOccurred(e.toString());
-            completion.onFailure(e);
-        } else {
-            completion.onResponse(null);
-            healthIndicatorService.successOccurred();
+        try {
+            if (e != null) {
+                healthIndicatorService.failureOccurred(e.toString());
+                completion.onFailure(e);
+            } else {
+                completion.onResponse(null);
+                healthIndicatorService.successOccurred();
+            }
+        } finally {
+            // Push health indicator to the health node
         }
     }
 
