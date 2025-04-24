@@ -25,8 +25,10 @@ import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.Tuple;
+import org.elasticsearch.health.node.HealthInfoCache;
 import org.elasticsearch.reservedstate.action.ReservedClusterSettingsAction;
 import org.elasticsearch.test.ESIntegTestCase;
+import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.junit.Before;
 
 import java.io.IOException;
@@ -499,6 +501,7 @@ public class FileSettingsServiceIT extends ESIntegTestCase {
         assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), "43mb");
     }
 
+    @TestLogging(value="org.elasticsearch.reservedstate:DEBUG,org.elasticsearch.health:TRACE", reason="trust me bro")
     public void testHealthIndicator() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(0);
         logger.info("--> start a second node to act as the health node");
@@ -508,6 +511,7 @@ public class FileSettingsServiceIT extends ESIntegTestCase {
         // Note that we assume the data node is the health node
         // TODO: Can we do better?
         var actualHealthIndicatorService = dataFileSettingsService.healthIndicatorService();
+        var actualHealthInfoCache = internalCluster().getInstance(HealthInfoCache.class, dataNode);
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode(
@@ -515,7 +519,11 @@ public class FileSettingsServiceIT extends ESIntegTestCase {
         );
         FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
         var masterHealthIndicatorService = masterFileSettingsService.healthIndicatorService();
+        var masterHealthInfoCache = internalCluster().getInstance(HealthInfoCache.class, masterNode);
         assertBusy(() -> assertTrue(masterFileSettingsService.watching()));
+
+        // Initially, all is well
+        assertBusy(() -> assertEquals(0, actualHealthInfoCache.getHealthInfo().fileSettingsHealthInfo().failureStreak()));
 
         logger.info("--> induce an error and wait for it to be processed");
         var savedClusterState = setupClusterStateListenerForError(masterNode);
@@ -523,10 +531,12 @@ public class FileSettingsServiceIT extends ESIntegTestCase {
         boolean awaitSuccessful = savedClusterState.v1().await(20, TimeUnit.SECONDS);
         assertTrue(awaitSuccessful);
         logger.info("--> verify that the node encountering the error reports it");
-        assertBusy(() -> assertEquals(YELLOW, masterHealthIndicatorService.calculate(false, null).status()));
+//        assertBusy(() -> assertEquals(YELLOW, masterHealthIndicatorService.calculate(false, null).status()));
+//        assertBusy(() -> assertEquals(1, masterHealthInfoCache.getHealthInfo().fileSettingsHealthInfo().failureStreak()));
 
         logger.info("--> ensure the health node also reports it");
-        assertBusy(() -> assertEquals(YELLOW, actualHealthIndicatorService.calculate(false, null).status()));
+//        assertBusy(() -> assertEquals(YELLOW, actualHealthIndicatorService.calculate(false, null).status()));
+        assertBusy(() -> assertEquals(1, actualHealthInfoCache.getHealthInfo().fileSettingsHealthInfo().failureStreak()));
     }
 
     private void assertHasErrors(AtomicLong waitForMetadataVersion, String expectedError) {

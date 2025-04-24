@@ -23,6 +23,8 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.health.node.action.HealthNodeRequest;
 import org.elasticsearch.health.node.action.TransportHealthNodeAction;
 import org.elasticsearch.injection.guice.Inject;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.reservedstate.service.FileSettingsService;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -118,6 +120,11 @@ public class UpdateHealthInfoCacheAction extends ActionType<AcknowledgedResponse
 
         public RepositoriesHealthInfo getRepositoriesHealthInfo() {
             return repositoriesHealthInfo;
+        }
+
+        @Nullable
+        public FileSettingsService.FileSettingsHealthInfo getFileSettingsHealthInfo() {
+            return fileSettingsHealthInfo;
         }
 
         @Override
@@ -249,13 +256,17 @@ public class UpdateHealthInfoCacheAction extends ActionType<AcknowledgedResponse
             ClusterState clusterState,
             ActionListener<AcknowledgedResponse> listener
         ) {
+            logger.debug("Updating health info cache on node [{}][{}] from node [{}]", clusterService.getNodeName(), clusterService.localNode().getId(), request.getNodeId());
             nodeHealthOverview.updateNodeHealth(
                 request.getNodeId(),
                 request.getDiskHealthInfo(),
                 request.getDslHealthInfo(),
-                request.getRepositoriesHealthInfo()
+                request.getRepositoriesHealthInfo(),
+                request.getFileSettingsHealthInfo()
             );
             listener.onResponse(AcknowledgedResponse.of(true));
         }
     }
+
+    private static final Logger logger = LogManager.getLogger(UpdateHealthInfoCacheAction.class);
 }

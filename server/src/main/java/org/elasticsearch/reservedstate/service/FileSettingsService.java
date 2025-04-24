@@ -229,6 +229,7 @@ public class FileSettingsService extends MasterNodeFileWatchingService implement
                 healthIndicatorService.successOccurred();
             }
         } finally {
+            logger().debug("Publishing to health node");
             healthIndicatorService.publish();
         }
     }
@@ -365,7 +366,10 @@ public class FileSettingsService extends MasterNodeFileWatchingService implement
         }
 
         public void publish() {
-            publisher.publish(currentInfo, ActionListener.noop());
+            publisher.publish(currentInfo, ActionListener.wrap(
+                r -> logger.debug("Successfully published health indicator"),
+                e -> logger.warn("Failed to publish health indicator", e)
+            ));
         }
 
         @Override
@@ -409,11 +413,12 @@ public class FileSettingsService extends MasterNodeFileWatchingService implement
         public void publish(FileSettingsHealthInfo info, ActionListener<AcknowledgedResponse> actionListener) {
             DiscoveryNode currentHealthNode = HealthNode.findHealthNode(clusterService.state());
             if (currentHealthNode == null) {
-                logger.trace(
+                logger.debug(
                     "Unable to report file settings health because there is no health node in the cluster;"
                         + " will retry next time file settings health changes."
                 );
             } else {
+                logger.debug("Publishing file settings health indicators: [{}]", info);
                 client.execute(
                     UpdateHealthInfoCacheAction.INSTANCE,
                     new UpdateHealthInfoCacheAction.Request(currentHealthNode.getId(), info),
