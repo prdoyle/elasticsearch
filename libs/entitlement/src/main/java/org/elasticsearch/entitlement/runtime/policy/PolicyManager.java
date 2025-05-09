@@ -121,7 +121,7 @@ import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.Compone
  * If the caller class belongs to {@link PolicyManager#SYSTEM_LAYER_MODULES}, no check is performed (the call is trivially allowed, see
  * {@link PolicyManager#isTriviallyAllowed}).
  * Otherwise, we lazily compute and create a {@link PolicyManager.ModuleEntitlements} record (see
- * {@link PolicyManager#computeEntitlements}). The record is cached so it can be used in following checks, stored in a
+ * {@link ScopeOracle#computeEntitlements}). The record is cached so it can be used in following checks, stored in a
  * {@code Module -> ModuleEntitlement} map.
  * </p>
  */
@@ -247,8 +247,6 @@ public class PolicyManager {
             getLogger(componentName, moduleName)
         );
     }
-
-    final Map<Module, ModuleEntitlements> moduleEntitlementsMap = new ConcurrentHashMap<>();
 
     private final Map<String, List<Entitlement>> serverEntitlements;
     private final List<Entitlement> apmAgentEntitlements;
@@ -722,45 +720,7 @@ public class PolicyManager {
     }
 
     ModuleEntitlements getEntitlements(Class<?> requestingClass) {
-        return moduleEntitlementsMap.computeIfAbsent(requestingClass.getModule(), m -> computeEntitlements(requestingClass));
-    }
-
-    private ModuleEntitlements computeEntitlements(Class<?> requestingClass) {
-        var policyScope = scopeOracle.resolveClassToScope(requestingClass);
-        var componentName = policyScope.componentName();
-        var moduleName = policyScope.moduleName();
-
-        switch (policyScope.kind()) {
-            case SERVER -> {
-                return getModuleScopeEntitlements(
-                    serverEntitlements,
-                    moduleName,
-                    SERVER.componentName,
-                    getComponentPathFromClass(requestingClass)
-                );
-            }
-            case APM_AGENT -> {
-                // The APM agent is the only thing running non-modular in the system classloader
-                return policyEntitlements(
-                    APM_AGENT.componentName,
-                    getComponentPathFromClass(requestingClass),
-                    ALL_UNNAMED,
-                    apmAgentEntitlements
-                );
-            }
-            case UNKNOWN -> {
-                return defaultEntitlements(UNKNOWN.componentName, null, moduleName);
-            }
-            default -> {
-                assert policyScope.kind() == PLUGIN;
-                var pluginEntitlements = pluginsEntitlements.get(componentName);
-                if (pluginEntitlements == null) {
-                    return defaultEntitlements(componentName, sourcePaths.get(componentName), moduleName);
-                } else {
-                    return getModuleScopeEntitlements(pluginEntitlements, moduleName, componentName, sourcePaths.get(componentName));
-                }
-            }
-        }
+        return scopeOracle.getEntitlements(requestingClass);
     }
 
     // pkg private for testing

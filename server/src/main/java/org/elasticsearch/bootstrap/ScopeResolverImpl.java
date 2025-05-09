@@ -16,12 +16,19 @@ import org.elasticsearch.plugins.PluginsLoader;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ALL_UNNAMED;
+import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.APM_AGENT;
+import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.PLUGIN;
+import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.SERVER;
+import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.UNKNOWN;
 
 public class ScopeResolverImpl implements ScopeOracle {
     private final Map<Module, String> pluginNameByModule;
+    private final Map<Module, PolicyManager.ModuleEntitlements> moduleEntitlementsMap = new ConcurrentHashMap<>();
+
 
     /**
      * The package name containing classes from the APM agent.
@@ -74,6 +81,50 @@ public class ScopeResolverImpl implements ScopeOracle {
     public boolean isTriviallyAllowed(Class<?> requestingClass) {
         return PolicyManager.isTriviallyAllowedInProd(requestingClass);
     }
+
+    @Override
+    public PolicyManager.ModuleEntitlements getEntitlements(Class<?> requestingClass) {
+        return moduleEntitlementsMap.computeIfAbsent(requestingClass.getModule(), m -> computeEntitlements(requestingClass));
+    }
+
+    private PolicyManager.ModuleEntitlements computeEntitlements(Class<?> requestingClass, PolicyManager policyManager) {
+        var policyScope = resolveClassToScope(requestingClass);
+        var componentName = policyScope.componentName();
+        var moduleName = policyScope.moduleName();
+
+        switch (policyScope.kind()) {
+            case SERVER -> {
+                return policyManager.getModuleScopeEntitlements(
+                    policyManager.serverEntitlements,
+                    moduleName,
+                    SERVER.componentName,
+                    PolicyManager.getComponentPathFromClass(requestingClass)
+                );
+            }
+            case APM_AGENT -> {
+                // The APM agent is the only thing running non-modular in the system classloader
+                return policyManager.policyEntitlements(
+                    APM_AGENT.componentName,
+                    PolicyManager.getComponentPathFromClass(requestingClass),
+                    PolicyManager.ALL_UNNAMED,
+                    policyManager.apmAgentEntitlements
+                );
+            }
+            case UNKNOWN -> {
+                return policyManager.defaultEntitlements(UNKNOWN.componentName, null, moduleName);
+            }
+            default -> {
+                assert policyScope.kind() == PLUGIN;
+                var pluginEntitlements = policyManager.pluginsEntitlements.get(componentName);
+                if (pluginEntitlements == null) {
+                    return policyManager.defaultEntitlements(componentName, policyManager.sourcePaths.get(componentName), moduleName);
+                } else {
+                    return policyManager.getModuleScopeEntitlements(pluginEntitlements, moduleName, componentName, policyManager.sourcePaths.get(componentName));
+                }
+            }
+        }
+    }
+
 
     private static boolean isServerModule(Module requestingModule) {
         return requestingModule.isNamed() && requestingModule.getLayer() == ModuleLayer.boot();
