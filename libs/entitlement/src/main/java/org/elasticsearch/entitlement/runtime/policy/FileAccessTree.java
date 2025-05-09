@@ -106,12 +106,12 @@ public final class FileAccessTree {
     /**
      * An intermediary structure to help build exclusive paths for files entitlements.
      */
-    record ExclusiveFileEntitlement(String componentName, String moduleName, FilesEntitlement filesEntitlement) {}
+    public record ExclusiveFileEntitlement(String componentName, String moduleName, FilesEntitlement filesEntitlement) {}
 
     /**
      * An intermediary structure to help globally validate exclusive paths, and then build exclusive paths for individual modules.
      */
-    record ExclusivePath(String componentName, Set<String> moduleNames, String path) {
+    public record ExclusivePath(String componentName, Set<String> moduleNames, String path) {
 
         @Override
         public String toString() {
@@ -158,7 +158,7 @@ public final class FileAccessTree {
         return exclusivePaths.values().stream().sorted(comparing(ExclusivePath::path, comparison.pathComparator())).distinct().toList();
     }
 
-    static void validateExclusivePaths(List<ExclusivePath> exclusivePaths, FileAccessTreeComparison comparison) {
+    public static void validateExclusivePaths(List<ExclusivePath> exclusivePaths, FileAccessTreeComparison comparison) {
         if (exclusivePaths.isEmpty() == false) {
             ExclusivePath currentExclusivePath = exclusivePaths.get(0);
             for (int i = 1; i < exclusivePaths.size(); ++i) {
@@ -181,7 +181,7 @@ public final class FileAccessTree {
 
     private static final Logger logger = LogManager.getLogger(FileAccessTree.class);
     private static final String FILE_SEPARATOR = getDefaultFileSystem().getSeparator();
-    static final FileAccessTreeComparison DEFAULT_COMPARISON = Platform.LINUX.isCurrent()
+    public static final FileAccessTreeComparison DEFAULT_COMPARISON = Platform.LINUX.isCurrent()
         ? new CaseSensitiveComparison(separatorChar())
         : new CaseInsensitiveComparison(separatorChar());
 

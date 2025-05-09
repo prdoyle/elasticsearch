@@ -14,12 +14,9 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.entitlement.instrumentation.InstrumentationService;
 import org.elasticsearch.entitlement.runtime.api.NotEntitledException;
-import org.elasticsearch.entitlement.runtime.policy.FileAccessTree.ExclusiveFileEntitlement;
-import org.elasticsearch.entitlement.runtime.policy.FileAccessTree.ExclusivePath;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.CreateClassLoaderEntitlement;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.Entitlement;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.ExitVMEntitlement;
-import org.elasticsearch.entitlement.runtime.policy.entitlements.FilesEntitlement;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.InboundNetworkEntitlement;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.LoadNativeLibrariesEntitlement;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.ManageThreadsEntitlement;
@@ -37,9 +34,6 @@ import java.lang.module.ModuleFinder;
 import java.lang.module.ModuleReference;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -52,8 +46,6 @@ import java.util.stream.Stream;
 import static java.lang.StackWalker.Option.RETAIN_CLASS_REFERENCE;
 import static java.util.Objects.requireNonNull;
 import static java.util.function.Predicate.not;
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.toUnmodifiableMap;
 import static java.util.zip.ZipFile.OPEN_DELETE;
 import static java.util.zip.ZipFile.OPEN_READ;
 import static org.elasticsearch.entitlement.bridge.Util.NO_CLASS;
@@ -120,9 +112,6 @@ import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.Compone
  * All these methods start in the same way: the components identified in the previous section are used to establish if and how to check:
  * If the caller class belongs to {@link PolicyManager#SYSTEM_LAYER_MODULES}, no check is performed (the call is trivially allowed, see
  * {@link PolicyManager#isTriviallyAllowed}).
- * Otherwise, we lazily compute and create a {@link PolicyManager.ModuleEntitlements} record (see
- * {@link ScopeOracle#computeEntitlements}). The record is cached so it can be used in following checks, stored in a
- * {@code Module -> ModuleEntitlement} map.
  * </p>
  */
 public class PolicyManager {
@@ -173,7 +162,7 @@ public class PolicyManager {
          * If this kind corresponds to a single component, this is that component's name;
          * otherwise null.
          */
-        final String componentName;
+        public final String componentName;
 
         ComponentKind(String componentName) {
             this.componentName = componentName;
@@ -223,36 +212,7 @@ public class PolicyManager {
         }
     }
 
-    private FileAccessTree getDefaultFileAccess(Path componentPath) {
-        return FileAccessTree.withoutExclusivePaths(FilesEntitlement.EMPTY, pathLookup, componentPath);
-    }
-
-    // pkg private for testing
-    ModuleEntitlements defaultEntitlements(String componentName, Path componentPath, String moduleName) {
-        return new ModuleEntitlements(componentName, Map.of(), getDefaultFileAccess(componentPath), getLogger(componentName, moduleName));
-    }
-
-    // pkg private for testing
-    ModuleEntitlements policyEntitlements(String componentName, Path componentPath, String moduleName, List<Entitlement> entitlements) {
-        FilesEntitlement filesEntitlement = FilesEntitlement.EMPTY;
-        for (Entitlement entitlement : entitlements) {
-            if (entitlement instanceof FilesEntitlement) {
-                filesEntitlement = (FilesEntitlement) entitlement;
-            }
-        }
-        return new ModuleEntitlements(
-            componentName,
-            entitlements.stream().collect(groupingBy(Entitlement::getClass)),
-            FileAccessTree.of(componentName, moduleName, filesEntitlement, pathLookup, componentPath, exclusivePaths),
-            getLogger(componentName, moduleName)
-        );
-    }
-
-    private final Map<String, List<Entitlement>> serverEntitlements;
-    private final List<Entitlement> apmAgentEntitlements;
-    private final Map<String, Map<String, List<Entitlement>>> pluginsEntitlements;
     private final ScopeOracle scopeOracle;
-    private final PathLookup pathLookup;
     private final Set<Class<?>> mutedClasses;
 
     public static final String ALL_UNNAMED = "ALL-UNNAMED";
@@ -286,19 +246,10 @@ public class PolicyManager {
         .filter(m -> SYSTEM_LAYER_MODULES.contains(m) == false)
         .collect(Collectors.toUnmodifiableSet());
 
-    private final Map<String, Path> sourcePaths;
-
     /**
      * Frames originating from this module are ignored in the permission logic.
      */
     private final Module entitlementsModule;
-
-    /**
-     * Paths that are only allowed for a single module. Used to generate
-     * structures to indicate other modules aren't allowed to use these
-     * files in {@link FileAccessTree}s.
-     */
-    private final List<ExclusivePath> exclusivePaths;
 
     public PolicyManager(
         Policy serverPolicy,
@@ -310,58 +261,10 @@ public class PolicyManager {
         PathLookup pathLookup,
         Set<Class<?>> suppressFailureLogClasses
     ) {
-        this.serverEntitlements = buildScopeEntitlementsMap(requireNonNull(serverPolicy));
-        this.apmAgentEntitlements = apmAgentEntitlements;
-        this.pluginsEntitlements = requireNonNull(pluginPolicies).entrySet()
-            .stream()
-            .collect(toUnmodifiableMap(Map.Entry::getKey, e -> buildScopeEntitlementsMap(e.getValue())));
         this.scopeOracle = scopeOracle;
-        this.sourcePaths = sourcePaths;
         this.entitlementsModule = entitlementsModule;
-        this.pathLookup = requireNonNull(pathLookup);
         this.mutedClasses = suppressFailureLogClasses;
 
-        List<ExclusiveFileEntitlement> exclusiveFileEntitlements = new ArrayList<>();
-        for (var e : serverEntitlements.entrySet()) {
-            validateEntitlementsPerModule(SERVER.componentName, e.getKey(), e.getValue(), exclusiveFileEntitlements);
-        }
-        validateEntitlementsPerModule(APM_AGENT.componentName, ALL_UNNAMED, apmAgentEntitlements, exclusiveFileEntitlements);
-        for (var p : pluginsEntitlements.entrySet()) {
-            for (var m : p.getValue().entrySet()) {
-                validateEntitlementsPerModule(p.getKey(), m.getKey(), m.getValue(), exclusiveFileEntitlements);
-            }
-        }
-        List<ExclusivePath> exclusivePaths = FileAccessTree.buildExclusivePathList(
-            exclusiveFileEntitlements,
-            pathLookup,
-            FileAccessTree.DEFAULT_COMPARISON
-        );
-        FileAccessTree.validateExclusivePaths(exclusivePaths, FileAccessTree.DEFAULT_COMPARISON);
-        this.exclusivePaths = exclusivePaths;
-    }
-
-    private static Map<String, List<Entitlement>> buildScopeEntitlementsMap(Policy policy) {
-        return policy.scopes().stream().collect(toUnmodifiableMap(Scope::moduleName, Scope::entitlements));
-    }
-
-    private static void validateEntitlementsPerModule(
-        String componentName,
-        String moduleName,
-        List<Entitlement> entitlements,
-        List<ExclusiveFileEntitlement> exclusiveFileEntitlements
-    ) {
-        Set<Class<? extends Entitlement>> found = new HashSet<>();
-        for (var e : entitlements) {
-            if (found.contains(e.getClass())) {
-                throw new IllegalArgumentException(
-                    "[" + componentName + "] using module [" + moduleName + "] found duplicate entitlement [" + e.getClass().getName() + "]"
-                );
-            }
-            found.add(e.getClass());
-            if (e instanceof FilesEntitlement fe) {
-                exclusiveFileEntitlements.add(new ExclusiveFileEntitlement(componentName, moduleName, fe));
-            }
-        }
     }
 
     public void checkStartProcess(Class<?> callerClass) {
@@ -692,7 +595,7 @@ public class PolicyManager {
         throw exception;
     }
 
-    private static Logger getLogger(String componentName, String moduleName) {
+    public static Logger getLogger(String componentName, String moduleName) {
         var loggerSuffix = "." + componentName + "." + ((moduleName == null) ? ALL_UNNAMED : moduleName);
         return MODULE_LOGGERS.computeIfAbsent(PolicyManager.class.getName() + loggerSuffix, LogManager::getLogger);
     }
@@ -721,38 +624,6 @@ public class PolicyManager {
 
     ModuleEntitlements getEntitlements(Class<?> requestingClass) {
         return scopeOracle.getEntitlements(requestingClass);
-    }
-
-    // pkg private for testing
-    static Path getComponentPathFromClass(Class<?> requestingClass) {
-        var codeSource = requestingClass.getProtectionDomain().getCodeSource();
-        if (codeSource == null) {
-            return null;
-        }
-        try {
-            return Paths.get(codeSource.getLocation().toURI());
-        } catch (Exception e) {
-            // If we get a URISyntaxException, or any other Exception due to an invalid URI, we return null to safely skip this location
-            generalLogger.info(
-                "Cannot get component path for [{}]: [{}] cannot be converted to a valid Path",
-                requestingClass.getName(),
-                codeSource.getLocation().toString()
-            );
-            return null;
-        }
-    }
-
-    private ModuleEntitlements getModuleScopeEntitlements(
-        Map<String, List<Entitlement>> scopeEntitlements,
-        String scopeName,
-        String componentName,
-        Path componentPath
-    ) {
-        var entitlements = scopeEntitlements.get(scopeName);
-        if (entitlements == null) {
-            return defaultEntitlements(componentName, componentPath, scopeName);
-        }
-        return policyEntitlements(componentName, componentPath, scopeName, entitlements);
     }
 
     /**

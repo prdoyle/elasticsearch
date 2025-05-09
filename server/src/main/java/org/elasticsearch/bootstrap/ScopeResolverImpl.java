@@ -9,16 +9,33 @@
 
 package org.elasticsearch.bootstrap;
 
+import org.elasticsearch.entitlement.runtime.policy.FileAccessTree;
+import org.elasticsearch.entitlement.runtime.policy.PathLookup;
+import org.elasticsearch.entitlement.runtime.policy.Policy;
 import org.elasticsearch.entitlement.runtime.policy.PolicyManager;
 import org.elasticsearch.entitlement.runtime.policy.PolicyManager.PolicyScope;
+import org.elasticsearch.entitlement.runtime.policy.Scope;
 import org.elasticsearch.entitlement.runtime.policy.ScopeOracle;
+import org.elasticsearch.entitlement.runtime.policy.entitlements.Entitlement;
+import org.elasticsearch.entitlement.runtime.policy.entitlements.FilesEntitlement;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.plugins.PluginsLoader;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
+import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toUnmodifiableMap;
 import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ALL_UNNAMED;
 import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.APM_AGENT;
 import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.PLUGIN;
@@ -26,8 +43,22 @@ import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.Compone
 import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.UNKNOWN;
 
 public class ScopeResolverImpl implements ScopeOracle {
+    private static final Logger logger = LogManager.getLogger(ScopeResolverImpl.class);
     private final Map<Module, String> pluginNameByModule;
     private final Map<Module, PolicyManager.ModuleEntitlements> moduleEntitlementsMap = new ConcurrentHashMap<>();
+    private final Map<String, List<Entitlement>> serverEntitlements;
+    private final List<Entitlement> apmAgentEntitlements;
+    private final Map<String, Map<String, List<Entitlement>>> pluginsEntitlements;
+    private final PathLookup pathLookup;
+    private final Map<String, Path> sourcePaths;
+
+
+    /**
+     * Paths that are only allowed for a single module. Used to generate
+     * structures to indicate other modules aren't allowed to use these
+     * files in {@link FileAccessTree}s.
+     */
+    private final List<FileAccessTree.ExclusivePath> exclusivePaths;
 
 
     /**
@@ -35,9 +66,37 @@ public class ScopeResolverImpl implements ScopeOracle {
      */
     private final String apmAgentPackageName;
 
-    private ScopeResolverImpl(Map<Module, String> pluginNameByModule, String apmAgentPackageName) {
+    private ScopeResolverImpl(
+        Map<Module, String> pluginNameByModule,
+        String apmAgentPackageName
+    ) {
         this.pluginNameByModule = pluginNameByModule;
         this.apmAgentPackageName = apmAgentPackageName;
+        this.serverEntitlements = buildScopeEntitlementsMap(requireNonNull(serverPolicy));
+        this.apmAgentEntitlements = apmAgentEntitlements;
+        this.pluginsEntitlements = requireNonNull(pluginPolicies).entrySet()
+            .stream()
+            .collect(toUnmodifiableMap(Map.Entry::getKey, e -> buildScopeEntitlementsMap(e.getValue())));
+        this.pathLookup = requireNonNull(pathLookup);
+        this.sourcePaths = sourcePaths;
+        this.exclusivePaths = exclusivePaths;
+
+        List<FileAccessTree.ExclusiveFileEntitlement> exclusiveFileEntitlements = new ArrayList<>();
+        for (var e : serverEntitlements.entrySet()) {
+            validateEntitlementsPerModule(SERVER.componentName, e.getKey(), e.getValue(), exclusiveFileEntitlements);
+        }
+        validateEntitlementsPerModule(APM_AGENT.componentName, ALL_UNNAMED, apmAgentEntitlements, exclusiveFileEntitlements);
+        for (var p : pluginsEntitlements.entrySet()) {
+            for (var m : p.getValue().entrySet()) {
+                validateEntitlementsPerModule(p.getKey(), m.getKey(), m.getValue(), exclusiveFileEntitlements);
+            }
+        }
+        List<FileAccessTree.ExclusivePath> exclusivePaths = FileAccessTree.buildExclusivePathList(
+            exclusiveFileEntitlements,
+            pathLookup,
+            FileAccessTree.DEFAULT_COMPARISON
+        );
+        FileAccessTree.validateExclusivePaths(exclusivePaths, FileAccessTree.DEFAULT_COMPARISON);
     }
 
     public static ScopeOracle create(Stream<PluginsLoader.PluginLayer> pluginLayers, String apmAgentPackageName) {
@@ -94,32 +153,32 @@ public class ScopeResolverImpl implements ScopeOracle {
 
         switch (policyScope.kind()) {
             case SERVER -> {
-                return policyManager.getModuleScopeEntitlements(
-                    policyManager.serverEntitlements,
+                return getModuleScopeEntitlements(
+                    serverEntitlements,
                     moduleName,
-                    SERVER.componentName,
-                    PolicyManager.getComponentPathFromClass(requestingClass)
+                    componentName,
+                    getComponentPathFromClass(requestingClass)
                 );
             }
             case APM_AGENT -> {
                 // The APM agent is the only thing running non-modular in the system classloader
-                return policyManager.policyEntitlements(
-                    APM_AGENT.componentName,
-                    PolicyManager.getComponentPathFromClass(requestingClass),
+                return policyEntitlements(
+                    componentName,
+                    getComponentPathFromClass(requestingClass),
                     PolicyManager.ALL_UNNAMED,
-                    policyManager.apmAgentEntitlements
+                    apmAgentEntitlements
                 );
             }
             case UNKNOWN -> {
-                return policyManager.defaultEntitlements(UNKNOWN.componentName, null, moduleName);
+                return defaultEntitlements(componentName, null, moduleName);
             }
             default -> {
                 assert policyScope.kind() == PLUGIN;
-                var pluginEntitlements = policyManager.pluginsEntitlements.get(componentName);
+                var pluginEntitlements = pluginsEntitlements.get(componentName);
                 if (pluginEntitlements == null) {
-                    return policyManager.defaultEntitlements(componentName, policyManager.sourcePaths.get(componentName), moduleName);
+                    return defaultEntitlements(componentName, sourcePaths.get(componentName), moduleName);
                 } else {
-                    return policyManager.getModuleScopeEntitlements(pluginEntitlements, moduleName, componentName, policyManager.sourcePaths.get(componentName));
+                    return getModuleScopeEntitlements(pluginEntitlements, moduleName, componentName, sourcePaths.get(componentName));
                 }
             }
         }
@@ -137,4 +196,84 @@ public class ScopeResolverImpl implements ScopeOracle {
             return requestingModule.getName();
         }
     }
+
+    private PolicyManager.ModuleEntitlements getModuleScopeEntitlements(
+        Map<String, List<Entitlement>> scopeEntitlements,
+        String scopeName,
+        String componentName,
+        Path componentPath
+    ) {
+        var entitlements = scopeEntitlements.get(scopeName);
+        if (entitlements == null) {
+            return defaultEntitlements(componentName, componentPath, scopeName);
+        }
+        return policyEntitlements(componentName, componentPath, scopeName, entitlements);
+    }
+
+    // pkg private for testing
+    static Path getComponentPathFromClass(Class<?> requestingClass) {
+        var codeSource = requestingClass.getProtectionDomain().getCodeSource();
+        if (codeSource == null) {
+            return null;
+        }
+        try {
+            return Paths.get(codeSource.getLocation().toURI());
+        } catch (Exception e) {
+            // If we get a URISyntaxException, or any other Exception due to an invalid URI, we return null to safely skip this location
+            logger.info(
+                "Cannot get component path for [{}]: [{}] cannot be converted to a valid Path",
+                requestingClass.getName(),
+                codeSource.getLocation().toString()
+            );
+            return null;
+        }
+    }
+
+    PolicyManager.ModuleEntitlements policyEntitlements(String componentName, Path componentPath, String moduleName, List<Entitlement> entitlements) {
+        FilesEntitlement filesEntitlement = FilesEntitlement.EMPTY;
+        for (Entitlement entitlement : entitlements) {
+            if (entitlement instanceof FilesEntitlement) {
+                filesEntitlement = (FilesEntitlement) entitlement;
+            }
+        }
+        return new PolicyManager.ModuleEntitlements(
+            componentName,
+            entitlements.stream().collect(groupingBy(Entitlement::getClass)),
+            FileAccessTree.of(componentName, moduleName, filesEntitlement, pathLookup, componentPath, exclusivePaths),
+            PolicyManager.getLogger(componentName, moduleName)
+        );
+    }
+
+    PolicyManager.ModuleEntitlements defaultEntitlements(String componentName, Path componentPath, String moduleName) {
+        return new PolicyManager.ModuleEntitlements(componentName, Map.of(), getDefaultFileAccess(componentPath), PolicyManager.getLogger(componentName, moduleName));
+    }
+
+    private FileAccessTree getDefaultFileAccess(Path componentPath) {
+        return FileAccessTree.withoutExclusivePaths(FilesEntitlement.EMPTY, pathLookup, componentPath);
+    }
+
+    private static Map<String, List<Entitlement>> buildScopeEntitlementsMap(Policy policy) {
+        return policy.scopes().stream().collect(toUnmodifiableMap(Scope::moduleName, Scope::entitlements));
+    }
+
+    private static void validateEntitlementsPerModule(
+        String componentName,
+        String moduleName,
+        List<Entitlement> entitlements,
+        List<FileAccessTree.ExclusiveFileEntitlement> exclusiveFileEntitlements
+    ) {
+        Set<Class<? extends Entitlement>> found = new HashSet<>();
+        for (var e : entitlements) {
+            if (found.contains(e.getClass())) {
+                throw new IllegalArgumentException(
+                    "[" + componentName + "] using module [" + moduleName + "] found duplicate entitlement [" + e.getClass().getName() + "]"
+                );
+            }
+            found.add(e.getClass());
+            if (e instanceof FilesEntitlement fe) {
+                exclusiveFileEntitlements.add(new FileAccessTree.ExclusiveFileEntitlement(componentName, moduleName, fe));
+            }
+        }
+    }
+
 }
