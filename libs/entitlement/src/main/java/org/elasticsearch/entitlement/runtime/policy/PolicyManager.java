@@ -199,14 +199,14 @@ public class PolicyManager {
      *
      * @param componentName the plugin name or else one of the special component names like "(server)".
      */
-    record ModuleEntitlements(
+    public record ModuleEntitlements(
         String componentName,
         Map<Class<? extends Entitlement>, List<Entitlement>> entitlementsByType,
         FileAccessTree fileAccess,
         Logger logger
     ) {
 
-        ModuleEntitlements {
+        public ModuleEntitlements {
             entitlementsByType = Map.copyOf(entitlementsByType);
         }
 
@@ -826,7 +826,11 @@ public class PolicyManager {
     /**
      * @return true if permission is granted regardless of the entitlement
      */
-    private static boolean isTriviallyAllowed(Class<?> requestingClass) {
+    private boolean isTriviallyAllowed(Class<?> requestingClass) {
+        return scopeOracle.isTriviallyAllowed(requestingClass);
+    }
+
+    public static boolean isTriviallyAllowedInProd(Class<?> requestingClass) {
         if (generalLogger.isTraceEnabled()) {
             generalLogger.trace("Stack trace for upcoming trivially-allowed check", new Exception());
         }

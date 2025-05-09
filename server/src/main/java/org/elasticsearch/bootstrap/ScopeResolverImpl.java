@@ -9,6 +9,7 @@
 
 package org.elasticsearch.bootstrap;
 
+import org.elasticsearch.entitlement.runtime.policy.PolicyManager;
 import org.elasticsearch.entitlement.runtime.policy.PolicyManager.PolicyScope;
 import org.elasticsearch.entitlement.runtime.policy.ScopeOracle;
 import org.elasticsearch.plugins.PluginsLoader;
@@ -67,6 +68,11 @@ public class ScopeResolverImpl implements ScopeOracle {
             return PolicyScope.apmAgent(ALL_UNNAMED);
         }
         return PolicyScope.unknown(scopeName);
+    }
+
+    @Override
+    public boolean isTriviallyAllowed(Class<?> requestingClass) {
+        return PolicyManager.isTriviallyAllowedInProd(requestingClass);
     }
 
     private static boolean isServerModule(Module requestingModule) {

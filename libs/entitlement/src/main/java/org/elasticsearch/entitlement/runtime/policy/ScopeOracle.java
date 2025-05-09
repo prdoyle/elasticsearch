@@ -11,4 +11,5 @@ package org.elasticsearch.entitlement.runtime.policy;
 
 public interface ScopeOracle {
     PolicyManager.PolicyScope resolveClassToScope(Class<?> clazz);
+    boolean isTriviallyAllowed(Class<?> requestingClass);
 }
