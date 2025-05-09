@@ -10,6 +10,7 @@
 package org.elasticsearch.bootstrap;
 
 import org.elasticsearch.entitlement.runtime.policy.PolicyManager.PolicyScope;
+import org.elasticsearch.entitlement.runtime.policy.ScopeOracle;
 import org.elasticsearch.plugins.PluginsLoader;
 
 import java.util.HashMap;
@@ -18,7 +19,7 @@ import java.util.stream.Stream;
 
 import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ALL_UNNAMED;
 
-public class ScopeResolver {
+public class ScopeResolverImpl implements ScopeOracle {
     private final Map<Module, String> pluginNameByModule;
 
     /**
@@ -26,12 +27,12 @@ public class ScopeResolver {
      */
     private final String apmAgentPackageName;
 
-    private ScopeResolver(Map<Module, String> pluginNameByModule, String apmAgentPackageName) {
+    private ScopeResolverImpl(Map<Module, String> pluginNameByModule, String apmAgentPackageName) {
         this.pluginNameByModule = pluginNameByModule;
         this.apmAgentPackageName = apmAgentPackageName;
     }
 
-    public static ScopeResolver create(Stream<PluginsLoader.PluginLayer> pluginLayers, String apmAgentPackageName) {
+    public static ScopeOracle create(Stream<PluginsLoader.PluginLayer> pluginLayers, String apmAgentPackageName) {
         Map<Module, String> pluginNameByModule = new HashMap<>();
 
         pluginLayers.forEach(pluginLayer -> {
@@ -47,9 +48,10 @@ public class ScopeResolver {
             }
         });
 
-        return new ScopeResolver(pluginNameByModule, apmAgentPackageName);
+        return new ScopeResolverImpl(pluginNameByModule, apmAgentPackageName);
     }
 
+    @Override
     public PolicyScope resolveClassToScope(Class<?> clazz) {
         var module = clazz.getModule();
         var scopeName = getScopeName(module);

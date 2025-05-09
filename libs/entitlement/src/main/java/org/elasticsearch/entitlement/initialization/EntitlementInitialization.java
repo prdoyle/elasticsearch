@@ -86,7 +86,7 @@ public class EntitlementInitialization {
             HardcodedEntitlements.serverPolicy(pathLookup.pidFile(), bootstrapArgs.serverPolicyPatch()),
             HardcodedEntitlements.agentEntitlements(),
             pluginPolicies,
-            EntitlementBootstrap.bootstrapArgs().scopeResolver(),
+            EntitlementBootstrap.bootstrapArgs().scopeOracle(),
             EntitlementBootstrap.bootstrapArgs().sourcePaths(),
             ENTITLEMENTS_MODULE,
             pathLookup,

@@ -11,6 +11,7 @@ package org.elasticsearch.bootstrap;
 
 import org.elasticsearch.bootstrap.agent.TestAPMAgent;
 import org.elasticsearch.entitlement.runtime.policy.PolicyManager.PolicyScope;
+import org.elasticsearch.entitlement.runtime.policy.ScopeOracle;
 import org.elasticsearch.plugins.PluginBundle;
 import org.elasticsearch.plugins.PluginDescriptor;
 import org.elasticsearch.plugins.PluginsLoader;
@@ -46,28 +47,28 @@ public class ScopeResolverTests extends ESTestCase {
             PluginsLoader.PluginLayer {}
 
     public void testBootLayer() {
-        ScopeResolver scopeResolver = ScopeResolver.create(Stream.empty(), TEST_AGENTS_PACKAGE_NAME);
+        ScopeOracle scopeOracle = ScopeResolverImpl.create(Stream.empty(), TEST_AGENTS_PACKAGE_NAME);
 
         // Note that String is not actually a server class, but a JDK class;
-        // however, that distinction is made by PolicyManager, not by ScopeResolver.
+        // however, that distinction is made by PolicyManager, not by ScopeOracle.
         assertEquals(
             "Named module in boot layer is a server module",
             PolicyScope.server("java.base"),
-            scopeResolver.resolveClassToScope(String.class)
+            scopeOracle.resolveClassToScope(String.class)
         );
         assertEquals(
             "Unnamed module in boot layer is unknown",
             PolicyScope.unknown(ALL_UNNAMED),
-            scopeResolver.resolveClassToScope(ScopeResolver.class)
+            scopeOracle.resolveClassToScope(ScopeResolverImpl.class)
         );
     }
 
     public void testAPMAgent() {
-        ScopeResolver scopeResolver = ScopeResolver.create(Stream.empty(), TEST_AGENTS_PACKAGE_NAME);
+        ScopeOracle scopeOracle = ScopeResolverImpl.create(Stream.empty(), TEST_AGENTS_PACKAGE_NAME);
 
         // Note that java agents are always non-modular.
         // See https://bugs.openjdk.org/browse/JDK-6932391
-        assertEquals(PolicyScope.apmAgent(ALL_UNNAMED), scopeResolver.resolveClassToScope(TestAPMAgent.class));
+        assertEquals(PolicyScope.apmAgent(ALL_UNNAMED), scopeOracle.resolveClassToScope(TestAPMAgent.class));
     }
 
     public void testModularPlugins() throws IOException, ClassNotFoundException {
@@ -87,10 +88,10 @@ public class ScopeResolverTests extends ESTestCase {
             new TestPluginLayer(bundle1, loader1, layer1),
             new TestPluginLayer(bundle2, loader2, layer2)
         );
-        ScopeResolver scopeResolver = ScopeResolver.create(pluginLayers, TEST_AGENTS_PACKAGE_NAME);
+        ScopeOracle scopeOracle = ScopeResolverImpl.create(pluginLayers, TEST_AGENTS_PACKAGE_NAME);
 
-        assertEquals(PolicyScope.plugin("plugin1", "module.one"), scopeResolver.resolveClassToScope(loader1.loadClass("p.A")));
-        assertEquals(PolicyScope.plugin("plugin2", "module.two"), scopeResolver.resolveClassToScope(loader2.loadClass("q.B")));
+        assertEquals(PolicyScope.plugin("plugin1", "module.one"), scopeOracle.resolveClassToScope(loader1.loadClass("p.A")));
+        assertEquals(PolicyScope.plugin("plugin2", "module.two"), scopeOracle.resolveClassToScope(loader2.loadClass("q.B")));
     }
 
     public void testResolveReferencedModulesInModularPlugins() throws IOException, ClassNotFoundException {
@@ -115,10 +116,10 @@ public class ScopeResolverTests extends ESTestCase {
 
         PluginBundle bundle = createMockBundle("plugin2", "module.two", "q.B");
         Stream<PluginsLoader.PluginLayer> pluginLayers = Stream.of(new TestPluginLayer(bundle, loader, layer));
-        ScopeResolver scopeResolver = ScopeResolver.create(pluginLayers, TEST_AGENTS_PACKAGE_NAME);
+        ScopeOracle scopeOracle = ScopeResolverImpl.create(pluginLayers, TEST_AGENTS_PACKAGE_NAME);
 
-        assertEquals(PolicyScope.plugin("plugin2", "module.one"), scopeResolver.resolveClassToScope(loader.loadClass("p.A")));
-        assertEquals(PolicyScope.plugin("plugin2", "module.two"), scopeResolver.resolveClassToScope(loader.loadClass("q.B")));
+        assertEquals(PolicyScope.plugin("plugin2", "module.one"), scopeOracle.resolveClassToScope(loader.loadClass("p.A")));
+        assertEquals(PolicyScope.plugin("plugin2", "module.two"), scopeOracle.resolveClassToScope(loader.loadClass("q.B")));
     }
 
     public void testNonModularPlugins() throws IOException, ClassNotFoundException {
@@ -134,10 +135,10 @@ public class ScopeResolverTests extends ESTestCase {
                 new TestPluginLayer(bundle1, loader1, ModuleLayer.boot()),
                 new TestPluginLayer(bundle2, loader2, ModuleLayer.boot())
             );
-            ScopeResolver scopeResolver = ScopeResolver.create(pluginLayers, TEST_AGENTS_PACKAGE_NAME);
+            ScopeOracle scopeOracle = ScopeResolverImpl.create(pluginLayers, TEST_AGENTS_PACKAGE_NAME);
 
-            assertEquals(PolicyScope.plugin("plugin1", ALL_UNNAMED), scopeResolver.resolveClassToScope(loader1.loadClass("p.A")));
-            assertEquals(PolicyScope.plugin("plugin2", ALL_UNNAMED), scopeResolver.resolveClassToScope(loader2.loadClass("q.B")));
+            assertEquals(PolicyScope.plugin("plugin1", ALL_UNNAMED), scopeOracle.resolveClassToScope(loader1.loadClass("p.A")));
+            assertEquals(PolicyScope.plugin("plugin2", ALL_UNNAMED), scopeOracle.resolveClassToScope(loader2.loadClass("q.B")));
         }
     }
 

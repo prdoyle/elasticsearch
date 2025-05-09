@@ -45,7 +45,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -254,7 +253,7 @@ public class PolicyManager {
     private final Map<String, List<Entitlement>> serverEntitlements;
     private final List<Entitlement> apmAgentEntitlements;
     private final Map<String, Map<String, List<Entitlement>>> pluginsEntitlements;
-    private final Function<Class<?>, PolicyScope> scopeResolver;
+    private final ScopeOracle scopeOracle;
     private final PathLookup pathLookup;
     private final Set<Class<?>> mutedClasses;
 
@@ -307,7 +306,7 @@ public class PolicyManager {
         Policy serverPolicy,
         List<Entitlement> apmAgentEntitlements,
         Map<String, Policy> pluginPolicies,
-        Function<Class<?>, PolicyScope> scopeResolver,
+        ScopeOracle scopeOracle,
         Map<String, Path> sourcePaths,
         Module entitlementsModule,
         PathLookup pathLookup,
@@ -318,7 +317,7 @@ public class PolicyManager {
         this.pluginsEntitlements = requireNonNull(pluginPolicies).entrySet()
             .stream()
             .collect(toUnmodifiableMap(Map.Entry::getKey, e -> buildScopeEntitlementsMap(e.getValue())));
-        this.scopeResolver = scopeResolver;
+        this.scopeOracle = scopeOracle;
         this.sourcePaths = sourcePaths;
         this.entitlementsModule = entitlementsModule;
         this.pathLookup = requireNonNull(pathLookup);
@@ -727,7 +726,7 @@ public class PolicyManager {
     }
 
     private ModuleEntitlements computeEntitlements(Class<?> requestingClass) {
-        var policyScope = scopeResolver.apply(requestingClass);
+        var policyScope = scopeOracle.resolveClassToScope(requestingClass);
         var componentName = policyScope.componentName();
         var moduleName = policyScope.moduleName();
 

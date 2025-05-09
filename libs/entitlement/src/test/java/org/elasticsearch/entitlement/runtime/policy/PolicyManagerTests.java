@@ -9,7 +9,7 @@
 
 package org.elasticsearch.entitlement.runtime.policy;
 
-import org.elasticsearch.bootstrap.ScopeResolver;
+import org.elasticsearch.bootstrap.ScopeResolverImpl;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.entitlement.runtime.policy.PolicyManager.ModuleEntitlements;
@@ -518,7 +518,7 @@ public class PolicyManagerTests extends ESTestCase {
     }
 
     private static String moduleName(Class<?> c) {
-        return ScopeResolver.getScopeName(c.getModule());
+        return ScopeResolverImpl.getScopeName(c.getModule());
     }
 
 }
