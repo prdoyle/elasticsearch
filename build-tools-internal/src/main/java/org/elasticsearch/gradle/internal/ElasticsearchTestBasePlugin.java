@@ -173,6 +173,21 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             // we use 'temp' relative to CWD since this is per JVM and tests are forbidden from writing to CWD
             nonInputProperties.systemProperty("java.io.tmpdir", test.getWorkingDir().toPath().resolve("temp"));
 
+            String projectName = project.getName();
+            SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+            FileCollection mainRuntime = sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME).getRuntimeClasspath();
+            FileCollection testRuntime = sourceSets.getByName(SourceSet.TEST_SOURCE_SET_NAME).getRuntimeClasspath();
+            FileCollection testOnlyFiles = testRuntime.minus(mainRuntime);
+            // Configuration compileOnly = project.getConfigurations()
+            // .findByName(RESOLVEABLE_COMPILE_ONLY_CONFIGURATION_NAME);
+            // if (compileOnly != null) {
+            // testOnlyFiles = testOnlyFiles.minus(compileOnly);
+            // }
+            nonInputProperties.systemProperty("es.entitlement.testOnlyPath", () -> {
+                String asPath = testOnlyFiles.getAsPath();
+                return asPath;
+            });
+
             test.systemProperties(getProviderFactory().systemPropertiesPrefixedBy("tests.").get());
             test.systemProperties(getProviderFactory().systemPropertiesPrefixedBy("es.").get());
 
@@ -211,13 +226,10 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             project.getPluginManager().withPlugin("com.gradleup.shadow", p -> {
                 if (test.getName().equals(JavaPlugin.TEST_TASK_NAME)) {
                     // Remove output class files and any other dependencies from the test classpath, since the shadow JAR includes these
-                    SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-                    FileCollection mainRuntime = sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME).getRuntimeClasspath();
                     // Add any "shadow" dependencies. These are dependencies that are *not* bundled into the shadow JAR
                     Configuration shadowConfig = project.getConfigurations().getByName(ShadowBasePlugin.CONFIGURATION_NAME);
                     // Add the shadow JAR artifact itself
                     FileCollection shadowJar = project.files(project.getTasks().named("shadowJar"));
-                    FileCollection testRuntime = sourceSets.getByName(SourceSet.TEST_SOURCE_SET_NAME).getRuntimeClasspath();
                     test.setClasspath(testRuntime.minus(mainRuntime).plus(shadowConfig).plus(shadowJar));
                 }
             });
