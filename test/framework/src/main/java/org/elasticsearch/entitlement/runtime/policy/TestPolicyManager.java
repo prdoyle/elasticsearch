@@ -127,6 +127,10 @@ public class TestPolicyManager extends PolicyManager {
             needle = needle.substring(0, needle.length() - 1);
         }
         boolean result = testOnlyClasspath.contains(needle);
+        // System.err.println("PATDOYLE: isTestCode:" + result + " for " + requestingClass.getName() + " in " + "[" + needle.hashCode() +
+        // "]" + needle);
+        // System.err.println("testOnlyClasspath:\n" + testOnlyClasspath.stream().map(s-> "[" + s.hashCode() + "]" +
+        // s).collect(Collectors.joining("\n")));
         return result;
     }
 

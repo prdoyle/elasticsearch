@@ -32,6 +32,7 @@ import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.testing.Test;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -185,6 +186,11 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             // }
             nonInputProperties.systemProperty("es.entitlement.testOnlyPath", () -> {
                 String asPath = testOnlyFiles.getAsPath();
+                String[] pathEntries = asPath.split(File.pathSeparator);
+                Arrays.sort(pathEntries);
+                System.err.println(
+                    "PATDOYLE - for " + project.getName() + " " + test.getName() + " using testOnlyPath:\n" + String.join("\n", pathEntries)
+                );
                 return asPath;
             });
 

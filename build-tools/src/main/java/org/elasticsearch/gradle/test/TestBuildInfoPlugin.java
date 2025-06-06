@@ -59,6 +59,7 @@ public class TestBuildInfoPlugin implements Plugin<Project> {
 
         project.getTasks().withType(Test.class).configureEach(test -> {
             if (List.of("test", "internalClusterTest").contains(test.getName())) {
+                System.err.println("PATDOYLE - es.entitlement.enableForTests on " + project.getName() + test.getName());
                 test.systemProperty("es.entitlement.enableForTests", "true");
             }
         });
