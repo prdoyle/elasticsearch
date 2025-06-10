@@ -135,10 +135,12 @@ public class TestPolicyManager extends PolicyManager {
     }
 
     private static final String[] TEST_FRAMEWORK_PACKAGE_PREFIXES = {
+        "org.gradle",
+
+        // We shouldn't really need the rest of these. They should be discovered on the testOnlyClasspath.
         "com.carrotsearch.randomizedtesting",
         "com.sun.tools.javac",
-        "org.apache.lucene.tests",
-        "org.gradle",
+        "org.apache.lucene.tests", // Interferes with SSLErrorMessageFileTests.testMessageForPemCertificateOutsideConfigDir
         "org.junit",
         "org.mockito",
         "net.bytebuddy", // Mockito uses this

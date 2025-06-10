@@ -12,6 +12,7 @@ package org.elasticsearch.entitlement.bootstrap;
 import org.elasticsearch.bootstrap.TestBuildInfo;
 import org.elasticsearch.bootstrap.TestBuildInfoParser;
 import org.elasticsearch.bootstrap.TestScopeResolver;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.entitlement.initialization.EntitlementInitialization;
@@ -39,6 +40,8 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toMap;
+import static org.elasticsearch.entitlement.runtime.policy.PathLookup.BaseDir.CONFIG;
+import static org.elasticsearch.entitlement.runtime.policy.PathLookup.BaseDir.TEMP;
 
 public class TestEntitlementBootstrap {
 
@@ -49,15 +52,23 @@ public class TestEntitlementBootstrap {
     /**
      * Activates entitlement checking in tests.
      */
-    public static void bootstrap(Path tempDir) throws IOException {
+    public static void bootstrap(@Nullable Path tempDir, @Nullable Path configDir) throws IOException {
         if (isEnabledForTest() == false) {
             return;
         }
-        TestPathLookup pathLookup = new TestPathLookup(List.of(tempDir));
+        TestPathLookup pathLookup = new TestPathLookup(Map.of(TEMP, zeroOrOne(tempDir), CONFIG, zeroOrOne(configDir)));
         policyManager = createPolicyManager(pathLookup);
         EntitlementInitialization.initializeArgs = new EntitlementInitialization.InitializeArgs(pathLookup, Set.of(), policyManager);
         logger.debug("Loading entitlement agent");
         EntitlementBootstrap.loadAgent(EntitlementBootstrap.findAgentJar(), EntitlementInitialization.class.getName());
+    }
+
+    private static <T> List<T> zeroOrOne(T item) {
+        if (item == null) {
+            return List.of();
+        } else {
+            return List.of(item);
+        }
     }
 
     public static boolean isEnabledForTest() {
@@ -89,7 +100,7 @@ public class TestEntitlementBootstrap {
             .map(descriptor -> new TestPluginData(descriptor.getName(), descriptor.isModular(), false))
             .toList();
         Map<String, Policy> pluginPolicies = parsePluginsPolicies(pluginsData);
-        Collection<Path> yolo = List.of(Path.of("/"));
+        Collection<Path> yolo = List.of(); // List.of(Path.of("/"));
         Map<String, Collection<Path>> pluginSourcePaths = pluginNames.stream().collect(toMap(n -> n, n -> yolo));
 
         FilesEntitlementsValidation.validate(pluginPolicies, pathLookup);
