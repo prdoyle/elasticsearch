@@ -85,6 +85,18 @@ public class TestPolicyManager extends PolicyManager {
         if (isTestFrameworkClass(requestingClass)) {
             return true;
         }
+        if ("org.elasticsearch.jdk".equals(requestingClass.getPackageName())) {
+            // PluginsLoaderTests, PluginsServiceTests, PluginsUtilsTests
+            return true;
+        }
+        if ("org.elasticsearch.nativeaccess".equals(requestingClass.getPackageName())) {
+            // UberModuleClassLoaderTests
+            return true;
+        }
+        if (requestingClass.getPackageName().startsWith("org.elasticsearch.plugins")) {
+            // PluginsServiceTests, NamedComponentReaderTests
+            return true;
+        }
         if (isTriviallyAllowingTestCode && isTestCode(requestingClass)) {
             return true;
         }
