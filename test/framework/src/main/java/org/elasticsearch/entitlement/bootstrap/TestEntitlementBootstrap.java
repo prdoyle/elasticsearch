@@ -57,7 +57,7 @@ public class TestEntitlementBootstrap {
             return;
         }
         TestPathLookup pathLookup = new TestPathLookup(Map.of(TEMP, zeroOrOne(tempDir), CONFIG, zeroOrOne(configDir)));
-        policyManager = createPolicyManager(pathLookup);
+        policyManager = createPolicyManager(tempDir, configDir);
         EntitlementInitialization.initializeArgs = new EntitlementInitialization.InitializeArgs(pathLookup, Set.of(), policyManager);
         logger.debug("Loading entitlement agent");
         EntitlementBootstrap.loadAgent(EntitlementBootstrap.findAgentJar(), EntitlementInitialization.class.getName());
@@ -89,7 +89,7 @@ public class TestEntitlementBootstrap {
         }
     }
 
-    private static TestPolicyManager createPolicyManager(PathLookup pathLookup) throws IOException {
+    private static TestPolicyManager createPolicyManager(Path tempDir, Path configDir) throws IOException {
         var pluginsTestBuildInfo = TestBuildInfoParser.parseAllPluginTestBuildInfo();
         var serverTestBuildInfo = TestBuildInfoParser.parseServerTestBuildInfo();
         var scopeResolver = TestScopeResolver.createScopeResolver(serverTestBuildInfo, pluginsTestBuildInfo);
@@ -100,18 +100,21 @@ public class TestEntitlementBootstrap {
             .map(descriptor -> new TestPluginData(descriptor.getName(), descriptor.isModular(), false))
             .toList();
         Map<String, Policy> pluginPolicies = parsePluginsPolicies(pluginsData);
-        Collection<Path> yolo = List.of(); // List.of(Path.of("/"));
-        Map<String, Collection<Path>> pluginSourcePaths = pluginNames.stream().collect(toMap(n -> n, n -> yolo));
-
-        FilesEntitlementsValidation.validate(pluginPolicies, pathLookup);
 
         String testOnlyPathProperty = System.getProperty("es.entitlement.testOnlyPath");
-        Set<String> testOnlyPath;
+        Set<String> testOnlyClassPath;
         if (testOnlyPathProperty == null) {
-            testOnlyPath = Set.of();
+            testOnlyClassPath = Set.of();
         } else {
-            testOnlyPath = Arrays.stream(testOnlyPathProperty.split(":")).collect(Collectors.toCollection(TreeSet::new));
+            testOnlyClassPath = Arrays.stream(testOnlyPathProperty.split(":")).collect(Collectors.toCollection(TreeSet::new));
         }
+
+        // Any plugin can read any file on the test-only classpath, so toss those into the source paths
+        Collection<Path> testOnlyPaths = testOnlyClassPath.stream().map(Path::of).toList();
+        Map<String, Collection<Path>> pluginSourcePaths = pluginNames.stream().collect(toMap(n -> n, n -> testOnlyPaths));
+
+        PathLookup pathLookup = new TestPathLookup(Map.of(TEMP, zeroOrOne(tempDir), CONFIG, zeroOrOne(configDir)));
+        FilesEntitlementsValidation.validate(pluginPolicies, pathLookup);
 
         return new TestPolicyManager(
             HardcodedEntitlements.serverPolicy(null, null),
@@ -120,7 +123,7 @@ public class TestEntitlementBootstrap {
             scopeResolver,
             pluginSourcePaths,
             pathLookup,
-            testOnlyPath
+            testOnlyClassPath
         );
     }
 
