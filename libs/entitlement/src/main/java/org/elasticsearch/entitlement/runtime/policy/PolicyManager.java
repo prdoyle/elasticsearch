@@ -294,9 +294,6 @@ public class PolicyManager {
     private static final ConcurrentHashMap<String, Logger> MODULE_LOGGERS = new ConcurrentHashMap<>();
 
     protected ModuleEntitlements getEntitlements(Class<?> requestingClass) {
-        if ("io.netty.channel.socket.nio.NioSocketChannel".equals(requestingClass.getName())) {
-            System.err.println("PATDOYLE here we go");
-        }
         return moduleEntitlementsMap.computeIfAbsent(requestingClass.getModule(), m -> computeEntitlements(requestingClass));
     }
 

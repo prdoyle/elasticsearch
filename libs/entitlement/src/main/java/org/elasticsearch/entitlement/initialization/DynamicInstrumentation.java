@@ -111,12 +111,7 @@ class DynamicInstrumentation {
             transformer.enableClassVerification();
 
             for (var classToRetransform : classesToRetransform) {
-                try {
-                    inst.retransformClasses(classToRetransform);
-                } catch (VerifyError e2) {
-                    System.err.println("VerifyError while retransforming " + classToRetransform);
-                    throw e2;
-                }
+                inst.retransformClasses(classToRetransform);
             }
 
             // We should have failed already in the loop above, but just in case we did not, rethrow.
