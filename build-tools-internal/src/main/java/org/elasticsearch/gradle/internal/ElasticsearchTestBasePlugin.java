@@ -38,6 +38,7 @@ import java.util.Map;
 
 import javax.inject.Inject;
 
+import static java.util.Objects.requireNonNull;
 import static org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams;
 import static org.elasticsearch.gradle.util.FileUtils.mkdirs;
 import static org.elasticsearch.gradle.util.GradleUtils.maybeConfigure;
@@ -174,25 +175,29 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             // we use 'temp' relative to CWD since this is per JVM and tests are forbidden from writing to CWD
             nonInputProperties.systemProperty("java.io.tmpdir", test.getWorkingDir().toPath().resolve("temp"));
 
-            String projectName = project.getName();
             SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-            FileCollection mainRuntime = sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME).getRuntimeClasspath();
-            FileCollection testRuntime = sourceSets.getByName(SourceSet.TEST_SOURCE_SET_NAME).getRuntimeClasspath();
-            FileCollection testOnlyFiles = testRuntime.minus(mainRuntime);
-            // Configuration compileOnly = project.getConfigurations()
-            // .findByName(RESOLVEABLE_COMPILE_ONLY_CONFIGURATION_NAME);
-            // if (compileOnly != null) {
-            // testOnlyFiles = testOnlyFiles.minus(compileOnly);
-            // }
-            nonInputProperties.systemProperty("es.entitlement.testOnlyPath", () -> {
-                String asPath = testOnlyFiles.getAsPath();
-                String[] pathEntries = asPath.split(File.pathSeparator);
-                Arrays.sort(pathEntries);
-                // System.err.println(
-                // "PATDOYLE - for " + project.getName() + " " + test.getName() + " using testOnlyPath:\n" + String.join("\n", pathEntries)
-                // );
-                return asPath;
-            });
+            SourceSet mainSourceSet = sourceSets.findByName(SourceSet.MAIN_SOURCE_SET_NAME);
+            SourceSet testSourceSet = sourceSets.findByName(SourceSet.TEST_SOURCE_SET_NAME);
+            if (mainSourceSet != null && testSourceSet != null) {
+                FileCollection mainRuntime = mainSourceSet.getRuntimeClasspath();
+                FileCollection testRuntime = testSourceSet.getRuntimeClasspath();
+                FileCollection testOnlyFiles = testRuntime.minus(mainRuntime);
+                // Configuration compileOnly = project.getConfigurations()
+                // .findByName(RESOLVEABLE_COMPILE_ONLY_CONFIGURATION_NAME);
+                // if (compileOnly != null) {
+                // testOnlyFiles = testOnlyFiles.minus(compileOnly);
+                // }
+                nonInputProperties.systemProperty("es.entitlement.testOnlyPath", () -> {
+                    String asPath = testOnlyFiles.getAsPath();
+                    String[] pathEntries = asPath.split(File.pathSeparator);
+                    Arrays.sort(pathEntries); // For readability during troubleshooting. Consumers don't care about order.
+                    // System.err.println(
+                    // "PATDOYLE - for " + project.getName() + " " + test.getName() + " using testOnlyPath:\n" + String.join("\n",
+                    // pathEntries)
+                    // );
+                    return asPath;
+                });
+            }
 
             test.systemProperties(getProviderFactory().systemPropertiesPrefixedBy("tests.").get());
             test.systemProperties(getProviderFactory().systemPropertiesPrefixedBy("es.").get());
@@ -236,6 +241,8 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
                     Configuration shadowConfig = project.getConfigurations().getByName(ShadowBasePlugin.CONFIGURATION_NAME);
                     // Add the shadow JAR artifact itself
                     FileCollection shadowJar = project.files(project.getTasks().named("shadowJar"));
+                    FileCollection mainRuntime = requireNonNull(mainSourceSet).getRuntimeClasspath();
+                    FileCollection testRuntime = requireNonNull(testSourceSet).getRuntimeClasspath();
                     test.setClasspath(testRuntime.minus(mainRuntime).plus(shadowConfig).plus(shadowJar));
                 }
             });
