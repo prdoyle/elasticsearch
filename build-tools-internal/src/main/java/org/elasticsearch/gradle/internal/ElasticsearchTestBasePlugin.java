@@ -188,9 +188,9 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
                 String asPath = testOnlyFiles.getAsPath();
                 String[] pathEntries = asPath.split(File.pathSeparator);
                 Arrays.sort(pathEntries);
-                System.err.println(
-                    "PATDOYLE - for " + project.getName() + " " + test.getName() + " using testOnlyPath:\n" + String.join("\n", pathEntries)
-                );
+                // System.err.println(
+                // "PATDOYLE - for " + project.getName() + " " + test.getName() + " using testOnlyPath:\n" + String.join("\n", pathEntries)
+                // );
                 return asPath;
             });
 

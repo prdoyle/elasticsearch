@@ -243,10 +243,6 @@ public class PolicyCheckerImpl implements PolicyChecker {
         }
 
         if (canRead == false) {
-            if ("/Users/prdoyle/IdeaProjects/elasticsearch/x-pack/plugin/security/build/resources/test/org/elasticsearch/xpack/ssl/SSLErrorMessageTests/ca1.crt"
-                .equals(path.toString())) {
-                System.err.println("OH NOES");
-            }
             notEntitled(
                 Strings.format(
                     "component [%s], module [%s], class [%s], entitlement [file], operation [read], path [%s]",
