@@ -2538,7 +2538,7 @@ public class InternalEngineTests extends EngineTestCase {
         Level savedLevel = theLogger.getLevel();
         Loggers.addAppender(theLogger, mockAppender);
         Loggers.setLevel(theLogger, Level.DEBUG);
-        theLogger = LogManager.getRootLogger();
+        theLogger = LogManager.getLogger("org.elasticsearch.index");
 
         try {
             // First, with DEBUG, which should NOT log IndexWriter output:
