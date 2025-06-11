@@ -135,6 +135,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.instanceOf;
 
+@ESTestCase.WithoutEntitlements
 public class ExceptionSerializationTests extends ESTestCase {
 
     public void testExceptionRegistration() throws IOException, URISyntaxException {
