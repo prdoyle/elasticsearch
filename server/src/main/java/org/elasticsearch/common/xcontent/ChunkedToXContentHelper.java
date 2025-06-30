@@ -53,7 +53,7 @@ public enum ChunkedToXContentHelper {
     /**
      * Defines an object named {@code name}, with the contents set by calling {@code toXContent} on each entry in {@code map}
      */
-    public static <T> Iterator<ToXContent> object(String name, Map<String, T> map, Function<Map.Entry<String, T>, ToXContent> toXContent) {
+    public static <K,T> Iterator<ToXContent> object(String name, Map<K, T> map, Function<Map.Entry<K, T>, ToXContent> toXContent) {
         return object(name, Iterators.map(map.entrySet().iterator(), toXContent));
     }
 

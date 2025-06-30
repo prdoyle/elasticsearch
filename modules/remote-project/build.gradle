@@ -1,0 +1,12 @@
+esplugin {
+  classname ='org.elasticsearch.remoteproject.RemoteProjectPlugin'
+  description = 'Manages remote link information for cross-project search'
+}
+
+base {
+  archivesName = 'remote-project'
+}
+
+dependencies {
+}
+
