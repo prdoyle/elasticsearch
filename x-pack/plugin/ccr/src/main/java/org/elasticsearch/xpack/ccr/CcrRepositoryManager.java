@@ -61,13 +61,15 @@ class CcrRepositoryManager extends AbstractLifecycleComponent {
     }
 
     private class RemoteSettingsUpdateListener extends RemoteClusterAware {
+        private final Settings initialSettings;
 
         private RemoteSettingsUpdateListener(Settings settings) {
             super(settings);
+            initialSettings = settings;
         }
 
         void init() {
-            Set<String> clusterAliases = getEnabledRemoteClusters(settings);
+            Set<String> clusterAliases = getEnabledRemoteClusters(initialSettings);
             for (String clusterAlias : clusterAliases) {
                 putRepository(CcrRepository.NAME_PREFIX + clusterAlias);
             }

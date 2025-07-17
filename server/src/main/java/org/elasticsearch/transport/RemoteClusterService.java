@@ -143,6 +143,7 @@ public final class RemoteClusterService extends RemoteClusterAware
 
     public static final String REMOTE_CLUSTER_HANDSHAKE_ACTION_NAME = "cluster:internal/remote_cluster/handshake";
 
+    private final Settings initialSettings;
     private final boolean enabled;
     private final boolean remoteClusterServerEnabled;
 
@@ -160,6 +161,7 @@ public final class RemoteClusterService extends RemoteClusterAware
 
     RemoteClusterService(Settings settings, TransportService transportService) {
         super(settings);
+        this.initialSettings = settings;
         this.enabled = DiscoveryNode.isRemoteClusterClient(settings);
         this.remoteClusterServerEnabled = REMOTE_CLUSTER_SERVER_ENABLED.get(settings);
         this.transportService = transportService;
@@ -483,7 +485,7 @@ public final class RemoteClusterService extends RemoteClusterAware
 
         if (remote == null) {
             // this is a new cluster we have to add a new representation
-            Settings finalSettings = Settings.builder().put(this.settings, false).put(newSettings, false).build();
+            Settings finalSettings = Settings.builder().put(this.initialSettings, false).put(newSettings, false).build();
             remote = new RemoteClusterConnection(finalSettings, clusterAlias, transportService, remoteClusterCredentialsManager);
             remoteClusters.put(clusterAlias, remote);
             remote.ensureConnected(listener.map(ignored -> RemoteClusterConnectionStatus.CONNECTED));
@@ -495,7 +497,7 @@ public final class RemoteClusterService extends RemoteClusterAware
                 logger.warn("failed to close remote cluster connections for cluster: " + clusterAlias, e);
             }
             remoteClusters.remove(clusterAlias);
-            Settings finalSettings = Settings.builder().put(this.settings, false).put(newSettings, false).build();
+            Settings finalSettings = Settings.builder().put(this.initialSettings, false).put(newSettings, false).build();
             remote = new RemoteClusterConnection(finalSettings, clusterAlias, transportService, remoteClusterCredentialsManager);
             remoteClusters.put(clusterAlias, remote);
             remote.ensureConnected(listener.map(ignored -> RemoteClusterConnectionStatus.RECONNECTED));
@@ -517,9 +519,9 @@ public final class RemoteClusterService extends RemoteClusterAware
      * to all configured seed nodes.
      */
     void initializeRemoteClusters() {
-        final TimeValue timeValue = REMOTE_INITIAL_CONNECTION_TIMEOUT_SETTING.get(settings);
+        final TimeValue timeValue = REMOTE_INITIAL_CONNECTION_TIMEOUT_SETTING.get(initialSettings);
         final PlainActionFuture<Void> future = new PlainActionFuture<>();
-        Set<String> enabledClusters = RemoteClusterAware.getEnabledRemoteClusters(settings);
+        Set<String> enabledClusters = RemoteClusterAware.getEnabledRemoteClusters(initialSettings);
 
         if (enabledClusters.isEmpty()) {
             return;
@@ -527,7 +529,7 @@ public final class RemoteClusterService extends RemoteClusterAware
 
         CountDownActionListener listener = new CountDownActionListener(enabledClusters.size(), future);
         for (String clusterAlias : enabledClusters) {
-            updateRemoteCluster(clusterAlias, settings, listener.map(ignored -> null));
+            updateRemoteCluster(clusterAlias, initialSettings, listener.map(ignored -> null));
         }
 
         if (enabledClusters.isEmpty()) {
