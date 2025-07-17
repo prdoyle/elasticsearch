@@ -921,7 +921,18 @@ public final class Settings implements ToXContentFragment, Writeable, Diffable<S
         /**
          * Removes the provided setting from the internal map holding the current list of settings.
          */
-        public String remove(String key) {
+        public Builder remove(String key) {
+            map.remove(key);
+            return this;
+        }
+
+        /**
+         * Removes the provided setting from the internal map holding the current list of settings.
+         *
+         * @return the previous value of the setting, or {@code null} if none
+         */
+        @Nullable
+        public String getAndRemove(String key) {
             return Settings.toString(map.remove(key));
         }
 
