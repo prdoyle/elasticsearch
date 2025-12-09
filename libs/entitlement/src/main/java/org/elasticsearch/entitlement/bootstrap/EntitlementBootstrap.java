@@ -94,6 +94,8 @@ public class EntitlementBootstrap {
             pidFile,
             settingResolver
         );
+        System.err.println("PATDOYLE: Writing initializeArgs thread "
+            + Thread.currentThread().threadId() + " " + Thread.currentThread().getName());
         EntitlementInitialization.initializeArgs = new EntitlementInitialization.InitializeArgs(
             pathLookup,
             suppressFailureLogPackages,

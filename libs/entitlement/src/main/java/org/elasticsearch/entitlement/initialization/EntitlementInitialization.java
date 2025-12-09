@@ -77,6 +77,8 @@ public class EntitlementInitialization {
     public static void initialize(Instrumentation inst) {
         try {
             // the checker _MUST_ be set before _any_ instrumentation is done
+            System.err.println("PATDOYLE: Reading initializeArgs on thread "
+                + Thread.currentThread().threadId() + " " + Thread.currentThread().getName());
             checker = initChecker(initializeArgs.policyManager());
             initInstrumentation(inst);
         } catch (Exception e) {
