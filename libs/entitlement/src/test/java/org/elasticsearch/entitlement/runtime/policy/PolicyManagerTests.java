@@ -19,6 +19,7 @@ import org.elasticsearch.entitlement.runtime.policy.agent.inner.TestInnerAgent;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.CreateClassLoaderEntitlement;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.ExitVMEntitlement;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.FilesEntitlement;
+import org.elasticsearch.entitlement.runtime.policy.entitlements.FilesEntitlement.FileData;
 import org.elasticsearch.entitlement.runtime.policy.entitlements.OutboundNetworkEntitlement;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.compiler.InMemoryJavaCompiler;
@@ -38,9 +39,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 
 import static java.util.Map.entry;
 import static org.elasticsearch.entitlement.runtime.policy.PolicyManager.ComponentKind.SERVER;
+import static org.elasticsearch.entitlement.runtime.policy.entitlements.FilesEntitlement.Mode.READ;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -243,7 +246,7 @@ public class PolicyManagerTests extends ESTestCase {
                                     FilesEntitlement.EMPTY,
                                     new CreateClassLoaderEntitlement(),
                                     new FilesEntitlement(
-                                        List.of(FilesEntitlement.FileData.ofPath(Path.of("/tmp/test"), FilesEntitlement.Mode.READ))
+                                        List.of(FileData.ofPath(Path.of("/tmp/test"), READ))
                                     )
                                 )
                             )
@@ -259,6 +262,31 @@ public class PolicyManagerTests extends ESTestCase {
             "[plugin1] using module [test] found duplicate entitlement " + "[" + FilesEntitlement.class.getName() + "]",
             iae.getMessage()
         );
+    }
+
+    public void testFilesInitializationStress() throws IOException {
+        var paths = IntStream
+            .rangeClosed(1, 99999)
+            .mapToObj(i -> Path.of("testDir".repeat(100) + i))
+            .map(p -> FileData.ofPath(p, READ))
+            .toList();
+        for (int iteration = 1; iteration <= 1000; iteration++) {
+            var scope = new Scope("testModule", List.of(new FilesEntitlement(paths)));
+            var policy = new Policy("testPolicy", List.of(scope));
+            var policyManager = new PolicyManager(
+                createEmptyTestServerPolicy(),
+                List.of(),
+                Map.of("testPlugin", policy),
+                c -> PolicyScope.plugin("testPlugin", "testModule"),
+                name -> Collections.emptyList(),
+                TEST_PATH_LOOKUP
+            );
+            var tree = policyManager.computeEntitlements(getClass()).fileAccess();
+            for (int check = 1; check <= 10; check++) {
+                assertTrue("Iteration " + iteration + " check " + check + " should return true",
+                    tree.canRead(Path.of("testDir" + randomIntBetween(1, 999) + "/testFile")));
+            }
+        }
     }
 
     public void testFilesEntitlementsWithExclusive() {
@@ -279,7 +307,7 @@ public class PolicyManagerTests extends ESTestCase {
                                 "test.module1",
                                 List.of(
                                     new FilesEntitlement(
-                                        List.of(FilesEntitlement.FileData.ofPath(testPath1, FilesEntitlement.Mode.READ).withExclusive(true))
+                                        List.of(FileData.ofPath(testPath1, READ).withExclusive(true))
                                     )
                                 )
                             )
@@ -293,7 +321,7 @@ public class PolicyManagerTests extends ESTestCase {
                                 "test.module2",
                                 List.of(
                                     new FilesEntitlement(
-                                        List.of(FilesEntitlement.FileData.ofPath(testPath1, FilesEntitlement.Mode.READ).withExclusive(true))
+                                        List.of(FileData.ofPath(testPath1, READ).withExclusive(true))
                                     )
                                 )
                             )
@@ -326,8 +354,8 @@ public class PolicyManagerTests extends ESTestCase {
                             List.of(
                                 new FilesEntitlement(
                                     List.of(
-                                        FilesEntitlement.FileData.ofPath(testPath2, FilesEntitlement.Mode.READ).withExclusive(true),
-                                        FilesEntitlement.FileData.ofPath(baseTestPath, FilesEntitlement.Mode.READ)
+                                        FileData.ofPath(testPath2, READ).withExclusive(true),
+                                        FileData.ofPath(baseTestPath, READ)
                                     )
                                 )
                             )
@@ -344,7 +372,7 @@ public class PolicyManagerTests extends ESTestCase {
                                 "test",
                                 List.of(
                                     new FilesEntitlement(
-                                        List.of(FilesEntitlement.FileData.ofPath(testPath1, FilesEntitlement.Mode.READ).withExclusive(true))
+                                        List.of(FileData.ofPath(testPath1, READ).withExclusive(true))
                                     )
                                 )
                             )
