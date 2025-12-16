@@ -76,9 +76,19 @@ class ReadinessPollingService {
      * Returns immediately once the polling loop has been initiated.
      *
      * @param nodeFilter predicate to select which nodes to poll
-     * @param listener invoked with true if any node reports ready, false if timeout expires
+     * @param readinessListener invoked with true if any node reports ready, false if timeout expires
      */
-    public void execute(Predicate<DiscoveryNode> nodeFilter, ActionListener<Boolean> listener) {
+    public void execute(Predicate<DiscoveryNode> nodeFilter, ActionListener<Boolean> readinessListener) {
+        execute(nodeFilter, readinessListener, ActionListener.noop());
+    }
+
+    /**
+     * A version of {@link #execute(Predicate, ActionListener)} with an additional listener
+     * called before each retry.
+     *
+     * @param retryListener invoke on each retry
+     */
+    void execute(Predicate<DiscoveryNode> nodeFilter, ActionListener<Boolean> readinessListener, ActionListener<Void> retryListener) {
         final long deadline = System.currentTimeMillis() + timeoutMillis;
 
         Runnable attempt = new Runnable() {
@@ -89,7 +99,7 @@ class ReadinessPollingService {
                 Set<DiscoveryNode> nodes = clusterService.state().nodes().stream().filter(nodeFilter).collect(Collectors.toSet());
 
                 if (nodes.isEmpty()) {
-                    listener.onResponse(false);
+                    readinessListener.onResponse(false);
                     return;
                 }
 
@@ -113,7 +123,7 @@ class ReadinessPollingService {
                                 logger.debug("node [{}] reports readiness [{}]", node, response.isReady());
                                 if (response.isReady() && responded.compareAndSet(false, true)) {
                                     logger.debug("readiness poll responding with true");
-                                    listener.onResponse(true);
+                                    readinessListener.onResponse(true);
                                 }
                             }
 
@@ -138,12 +148,13 @@ class ReadinessPollingService {
                     threadPool.schedule(() -> {
                         if (responded.get() == false) {
                             // Retry
+                            retryListener.onResponse(null);
                             this.run();
                         }
                     }, TimeValue.timeValueMillis(delay), EsExecutors.DIRECT_EXECUTOR_SERVICE);
                 } else if (responded.compareAndSet(false, true)) {
                     logger.debug("readiness poll responding with false");
-                    listener.onResponse(false);
+                    readinessListener.onResponse(false);
                 }
             }
         };

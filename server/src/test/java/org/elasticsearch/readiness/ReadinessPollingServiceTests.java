@@ -20,9 +20,9 @@ import org.elasticsearch.cluster.node.VersionInformation;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.test.ClusterServiceUtils;
 import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -36,12 +36,11 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class ReadinessPollingServiceTests extends ESTestCase {
     /**
@@ -53,13 +52,15 @@ public class ReadinessPollingServiceTests extends ESTestCase {
     /**
      * We're not actually waiting for nodes to boot, so use a short value to avoid wasting time.
      */
-    private static final int QUICK_RETRY_MILLIS = 1;
+    private static final int QUICK_RETRY_MILLIS = 5;
 
     /**
      * This is for tests that <em>are</em> expecting a timeout to occur.
      * Use a short value so we don't waste a lot of time.
      */
     private static final int QUICK_TIMEOUT_MILLIS = 10 * QUICK_RETRY_MILLIS;
+
+    private static final int NUM_TARGET_NODES = 3;
 
     private ThreadPool threadPool;
     private MockTransportService sourceTransport;
@@ -72,20 +73,8 @@ public class ReadinessPollingServiceTests extends ESTestCase {
     public void setup() throws InterruptedException {
         threadPool = new TestThreadPool(getClass().getName());
         sourceTransport = newMockTransportService();
-        targetTransports = IntStream.rangeClosed(1, 2).mapToObj(n -> newMockTransportService()).toList();
+        targetTransports = IntStream.rangeClosed(1, NUM_TARGET_NODES).mapToObj(n -> newMockTransportService()).toList();
         targetNodes = targetTransports.stream().map(TransportService::getLocalNode).toList();
-
-        // Connect all the target nodes to the source transport
-        for (MockTransportService target : targetTransports) {
-            CountDownLatch latch = new CountDownLatch(1);
-            sourceTransport.connectionManager().connectToNode(target.getLocalNode(), null, (x,y,listener)->{listener.onResponse(null);}, ActionListener.wrap(
-                connection -> latch.countDown(),
-                e -> fail("Unexpected exception connecting to target node: " + e)
-            ));
-            if (!latch.await(LONG_TIMEOUT_MILLIS, MILLISECONDS)) {
-                fail("Timed out waiting for target node to connect");
-            }
-        }
 
         DiscoveryNodes.Builder nodesBuilder = DiscoveryNodes.builder()
             .add(sourceTransport.getLocalNode());
@@ -120,29 +109,47 @@ public class ReadinessPollingServiceTests extends ESTestCase {
     public void testSuccessImmediately() throws Exception {
         service = newReadinessPollingService(LONG_TIMEOUT_MILLIS);
         registerReadinessActions(node -> true);
+        connectNodes(targetTransports);
 
         assertReadiness(true);
     }
 
-    public void testSuccessAfterRetries() throws Exception {
+    public void testSuccessAfterRetry() throws Exception {
         service = newReadinessPollingService(LONG_TIMEOUT_MILLIS);
-        AtomicInteger remainingFailures = new AtomicInteger(2 * targetNodes.size()); // A couple of failures per node before success
-        registerReadinessActions(node -> remainingFailures.getAndDecrement() <= 0);
+        AtomicBoolean isReady = new AtomicBoolean(false);
+        CheckedRunnable<?> retryAction = () -> isReady.set(true);
+        registerReadinessActions(node -> isReady.get());
+        connectNodes(targetTransports);
 
-        assertReadiness(true);
+        assertReadiness(true, retryAction);
     }
 
     public void testSuccessOnOneNode() throws Exception {
         service = newReadinessPollingService(LONG_TIMEOUT_MILLIS);
         var goodNode = randomFrom(targetNodes);
         registerReadinessActions(goodNode::equals);
+        connectNodes(targetTransports);
 
         assertReadiness(true);
     }
 
-    public void testTimeout() throws Exception {
+    public void testSuccessWithLateJoiningNodes() throws Exception {
+        service = newReadinessPollingService(LONG_TIMEOUT_MILLIS);
+        registerReadinessActions(node -> true);
+        CheckedRunnable<InterruptedException> retryAction = () -> connectNodes(targetTransports);
+
+        assertReadiness(true, retryAction);
+    }
+
+    public void testTimeoutWithNoNodes() throws Exception {
+        service = newReadinessPollingService(QUICK_TIMEOUT_MILLIS);
+        assertReadiness(false);
+    }
+
+    public void testTimeoutWithUnreadyNodes() throws Exception {
         service = newReadinessPollingService(QUICK_TIMEOUT_MILLIS);
         registerReadinessActions(node -> false);
+        connectNodes(targetTransports);
 
         assertReadiness(false);
     }
@@ -150,6 +157,7 @@ public class ReadinessPollingServiceTests extends ESTestCase {
     public void testTransportExceptionSameAsTimeout() throws Exception {
         service = newReadinessPollingService(QUICK_TIMEOUT_MILLIS);
         registerReadinessActions(node -> { throw new TransportException("test"); });
+        connectNodes(targetTransports);
 
         assertReadiness(false);
     }
@@ -157,6 +165,7 @@ public class ReadinessPollingServiceTests extends ESTestCase {
     public void testIllegalStateExceptionSameAsTimeout() throws Exception {
         service = newReadinessPollingService(QUICK_TIMEOUT_MILLIS);
         registerReadinessActions(node -> { throw new IllegalStateException("test"); });
+        connectNodes(targetTransports);
 
         assertReadiness(false);
     }
@@ -187,9 +196,33 @@ public class ReadinessPollingServiceTests extends ESTestCase {
         );
     }
 
+    private void connectNodes(List<MockTransportService> transports) throws InterruptedException {
+        for (MockTransportService target : transports) {
+            CountDownLatch latch = new CountDownLatch(1);
+            sourceTransport.connectionManager().connectToNode(target.getLocalNode(), null, (x,y,listener)->{listener.onResponse(null);}, ActionListener.wrap(
+                connection -> latch.countDown(),
+                e -> fail("Unexpected exception connecting to target node: " + e)
+            ));
+            if (!latch.await(LONG_TIMEOUT_MILLIS, MILLISECONDS)) {
+                fail("Timed out waiting for target node to connect");
+            }
+        }
+    }
+
     private void assertReadiness(Boolean expected) throws InterruptedException {
+        assertReadiness(expected, ActionListener.noop());
+    }
+
+    private void assertReadiness(Boolean expected, CheckedRunnable<?> retryAction) throws InterruptedException {
+        assertReadiness(
+            expected,
+            ActionListener.wrap(r -> retryAction.run(), e->fail("Unexpected error waiting for readiness: " + e))
+        );
+    }
+
+    private void assertReadiness(Boolean expected, ActionListener<Void> retryListener) throws InterruptedException {
         BlockingQueue<Boolean> readiness = new LinkedBlockingQueue<>();
-        service.execute(targetNodes::contains, ActionListener.wrap(readiness::add, e -> fail(e.toString())));
+        service.execute(targetNodes::contains, ActionListener.wrap(readiness::add, e -> fail(e.toString())), retryListener);
         assertEquals(expected, readiness.poll(LONG_TIMEOUT_MILLIS, MILLISECONDS));
     }
 
