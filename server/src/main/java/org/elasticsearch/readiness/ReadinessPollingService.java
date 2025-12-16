@@ -148,6 +148,7 @@ class ReadinessPollingService {
             }
         };
 
+        logger.debug("initiating readiness poll");
         threadPool.generic().execute(attempt);
     }
 
