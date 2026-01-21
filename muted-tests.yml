@@ -313,9 +313,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.inference.rerank.RerankOperatorTests
   method: testSimpleCircuitBreaking
   issue: https://github.com/elastic/elasticsearch/issues/133619
-- class: org.elasticsearch.readiness.ReadinessClusterIT
-  method: testReadinessDuringRestartsNormalOrder
-  issue: https://github.com/elastic/elasticsearch/issues/136955
 - class: org.elasticsearch.threadpool.ThreadPoolTests
   method: testDetailedUtilizationMetric
   issue: https://github.com/elastic/elasticsearch/issues/138242
