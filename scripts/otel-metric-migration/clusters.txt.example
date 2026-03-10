@@ -1,0 +1,4 @@
+# One Kibana base URL per line. Lines starting with # are ignored.
+# Example:
+# https://platform-metrics.kb.af-south-1.aws.elastic-cloud.com
+# https://my-deployment.kb.us-east-1.aws.found.io

@@ -1,0 +1,4 @@
+[
+  { "old": "system.cpu.usage", "new": "system.cpu.utilization" },
+  { "old": "system.memory.usage", "new": "system.memory.utilization" }
+]

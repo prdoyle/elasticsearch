@@ -91,5 +91,11 @@ server/src/main/resources/transport/definitions/manifest.txt
 # JEnv
 .java-version
 
+# Python virtual environments and bytecode
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
 # Vector data files
 qa/vector/.data
