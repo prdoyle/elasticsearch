@@ -16,8 +16,8 @@
 # under the License.
 
 """
-Pure logic for report runner: parsing cluster list and credentials, building
-cluster entries from saved objects, and applying the stop-after-N-failures policy.
+Pure logic for building the report: parse cluster list and credentials, build
+cluster entries from saved objects, apply stop-after-N-failures policy.
 No I/O; all functions take and return in-memory data for testability.
 """
 

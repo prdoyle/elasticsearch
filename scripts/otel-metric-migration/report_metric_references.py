@@ -35,12 +35,12 @@ import requests
 import auth
 import core
 import kibana_client
-import report_logic
+import report_builder
 
 
 def load_cluster_list(path: str) -> list[str]:
     """Load cluster URLs from a file (one per line), normalized and deduplicated."""
-    return report_logic.parse_cluster_list(Path(path).read_text())
+    return report_builder.parse_cluster_list(Path(path).read_text())
 
 
 def load_metrics_config(path: str) -> list[dict[str, str]]:
@@ -52,7 +52,7 @@ def load_metrics_config(path: str) -> list[dict[str, str]]:
 def load_credentials_map(path: str) -> dict[str, str]:
     """Load optional credentials file: JSON object mapping Kibana URL -> API key."""
     data = json.loads(Path(path).read_text())
-    return report_logic.parse_credentials_map(data)
+    return report_builder.parse_credentials_map(data)
 
 
 def process_cluster(
@@ -76,7 +76,7 @@ def process_cluster(
 
     try:
         objects = export_fn(cluster_url, creds)
-        entry = report_logic.objects_to_cluster_entry(cluster_url, objects, old_metrics)
+        entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
         return entry, []
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code == 401 and cache_dir and use_browser:
@@ -86,7 +86,7 @@ def process_cluster(
                     cluster_url, credentials_map, cache_dir, use_browser=True
                 )
                 objects = export_fn(cluster_url, creds)
-                entry = report_logic.objects_to_cluster_entry(cluster_url, objects, old_metrics)
+                entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
                 return entry, []
             except Exception as retry_e:
                 return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_e)}]
@@ -141,7 +141,7 @@ def run(
             if consecutive_failures >= max_consecutive_failures:
                 break
 
-    cluster_entries, all_errors, stopped_early = report_logic.apply_stop_policy(
+    cluster_entries, all_errors, stopped_early = report_builder.apply_stop_policy(
         results, max_consecutive_failures
     )
 
