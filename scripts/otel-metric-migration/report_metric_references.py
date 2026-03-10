@@ -35,22 +35,12 @@ import requests
 import auth
 import core
 import kibana_client
+import report_logic
 
 
 def load_cluster_list(path: str) -> list[str]:
     """Load cluster URLs from a file (one per line), normalized and deduplicated."""
-    lines = Path(path).read_text().strip().splitlines()
-    urls = []
-    seen = set()
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        url = core.normalize_kibana_url(line)
-        if url not in seen:
-            seen.add(url)
-            urls.append(url)
-    return urls
+    return report_logic.parse_cluster_list(Path(path).read_text())
 
 
 def load_metrics_config(path: str) -> list[dict[str, str]]:
@@ -62,9 +52,7 @@ def load_metrics_config(path: str) -> list[dict[str, str]]:
 def load_credentials_map(path: str) -> dict[str, str]:
     """Load optional credentials file: JSON object mapping Kibana URL -> API key."""
     data = json.loads(Path(path).read_text())
-    if not isinstance(data, dict):
-        raise ValueError("credentials file must be a JSON object")
-    return {core.normalize_kibana_url(k): v for k, v in data.items() if isinstance(v, str) and v}
+    return report_logic.parse_credentials_map(data)
 
 
 def process_cluster(
@@ -87,17 +75,8 @@ def process_cluster(
         return None, [{"cluster": cluster_url, "phase": "auth", "error": str(e)}]
 
     try:
-        objects_with_refs = []
-        for obj in export_fn(cluster_url, creds):
-            refs = core.scan_saved_object(obj, old_metrics)
-            if refs:
-                objects_with_refs.append({
-                    "type": obj.get("type", ""),
-                    "id": obj.get("id", ""),
-                    "title": core.get_title_from_object(obj),
-                    "metric_references": refs,
-                })
-        entry = core.build_cluster_entry(cluster_url, objects_with_refs)
+        objects = export_fn(cluster_url, creds)
+        entry = report_logic.objects_to_cluster_entry(cluster_url, objects, old_metrics)
         return entry, []
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code == 401 and cache_dir and use_browser:
@@ -106,17 +85,8 @@ def process_cluster(
                 creds = auth.get_credentials(
                     cluster_url, credentials_map, cache_dir, use_browser=True
                 )
-                objects_with_refs = []
-                for obj in export_fn(cluster_url, creds):
-                    refs = core.scan_saved_object(obj, old_metrics)
-                    if refs:
-                        objects_with_refs.append({
-                            "type": obj.get("type", ""),
-                            "id": obj.get("id", ""),
-                            "title": core.get_title_from_object(obj),
-                            "metric_references": refs,
-                        })
-                entry = core.build_cluster_entry(cluster_url, objects_with_refs)
+                objects = export_fn(cluster_url, creds)
+                entry = report_logic.objects_to_cluster_entry(cluster_url, objects, old_metrics)
                 return entry, []
             except Exception as retry_e:
                 return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_e)}]
@@ -150,10 +120,8 @@ def run(
     report_path = Path(output_dir) / f"metric_references_report_{timestamp}.json"
     errors_path = Path(output_dir) / f"metric_report_errors_{timestamp}.json"
 
-    cluster_entries = []
-    all_errors = []
+    results = []
     consecutive_failures = 0
-
     for cluster_url in clusters:
         result = process_cluster(
             cluster_url,
@@ -164,17 +132,18 @@ def run(
             use_browser,
             credentials_map,
         )
+        results.append(result)
         entry, errs = result
         if entry is not None:
-            cluster_entries.append(entry)
             consecutive_failures = 0
         if errs:
-            for err in errs:
-                err["consecutive_failure_count"] = consecutive_failures + 1
-            all_errors.extend(errs)
             consecutive_failures += 1
             if consecutive_failures >= max_consecutive_failures:
                 break
+
+    cluster_entries, all_errors, stopped_early = report_logic.apply_stop_policy(
+        results, max_consecutive_failures
+    )
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     report = core.build_full_report(cluster_entries, metrics_config)
@@ -182,9 +151,7 @@ def run(
 
     if all_errors:
         errors_path.write_text(json.dumps(all_errors, indent=2))
-        if consecutive_failures >= max_consecutive_failures:
-            return 1
-    return 0
+    return 1 if stopped_early else 0
 
 
 def main() -> int:
