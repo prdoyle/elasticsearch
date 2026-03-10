@@ -21,6 +21,7 @@ Credential resolution for Kibana: API key file, cache (with TTL), or browser (Pl
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -30,12 +31,26 @@ import core
 
 CACHE_TTL_SECONDS = 45 * 60  # 45 minutes
 
+# Max length of the slug base (before hash suffix) to stay within filesystem limits.
+_SLUG_BASE_MAX_LEN = 100
+# Length of hex hash suffix to disambiguate truncated slugs. 16 hex chars = 64 bits.
+_SLUG_HASH_LEN = 16
+
 
 def _cluster_slug(kibana_url: str) -> str:
-    """Return a filesystem-safe slug for the cluster URL."""
+    """
+    Return a filesystem-safe slug for the cluster URL: normalized host-like base
+    (length-limited) plus a hash of the full URL to avoid collisions.
+    Hash collision would cause two clusters to share one cache file (wrong credentials
+    used for one of them, typically leading to 401 or rejected requests).
+    """
     u = kibana_url.strip().rstrip("/").lower()
     u = re.sub(r"^https?://", "", u)
-    return re.sub(r"[^a-z0-9.-]", "_", u)
+    base = re.sub(r"[^a-z0-9.-]", "_", u)
+    if len(base) > _SLUG_BASE_MAX_LEN:
+        base = base[:_SLUG_BASE_MAX_LEN]
+    h = hashlib.sha256(kibana_url.encode()).hexdigest()[:_SLUG_HASH_LEN]
+    return f"{base}_{h}"
 
 
 def _cache_path(cache_dir: str, kibana_url: str) -> Path:
