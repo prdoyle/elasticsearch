@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,7 @@ _SLUG_BASE_MAX_LEN = 100
 _SLUG_HASH_LEN = 16
 
 
-def _cluster_slug(kibana_url: str) -> str:
+def cluster_slug(kibana_url: str) -> str:
     """
     Return a filesystem-safe slug for the cluster URL: normalized host-like base
     (length-limited) plus a hash of the full URL to avoid collisions.
@@ -54,7 +55,31 @@ def _cluster_slug(kibana_url: str) -> str:
 
 
 def _cache_path(cache_dir: str, kibana_url: str) -> Path:
-    return Path(cache_dir) / f"{_cluster_slug(kibana_url)}.json"
+    return Path(cache_dir) / f"{cluster_slug(kibana_url)}.json"
+
+
+def parse_and_validate_cached_credentials(
+    data: dict[str, Any],
+    now: datetime,
+    ttl_seconds: int,
+) -> dict[str, Any] | None:
+    """
+    Validate cache payload and TTL. Returns credentials dict if valid and not expired, else None.
+    Pure: no I/O. data should have "created" (ISO8601 string) and "credentials" (dict).
+    """
+    created_str = data.get("created")
+    credentials = data.get("credentials")
+    if not created_str or not isinstance(credentials, dict):
+        return None
+    try:
+        created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if (now - created).total_seconds() > ttl_seconds:
+            return None
+    except (ValueError, TypeError):
+        return None
+    return credentials
 
 
 def load_cached_credentials(cache_dir: str, kibana_url: str, ttl_seconds: int = CACHE_TTL_SECONDS) -> dict[str, Any] | None:
@@ -69,21 +94,7 @@ def load_cached_credentials(cache_dir: str, kibana_url: str, ttl_seconds: int = 
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
-    created_str = data.get("created")
-    credentials = data.get("credentials")
-    if not created_str or not isinstance(credentials, dict):
-        return None
-    try:
-        from datetime import datetime, timezone
-        created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        if (now - created).total_seconds() > ttl_seconds:
-            return None
-    except (ValueError, TypeError):
-        return None
-    return credentials
+    return parse_and_validate_cached_credentials(data, datetime.now(timezone.utc), ttl_seconds)
 
 
 def invalidate_cached_credentials(cache_dir: str, kibana_url: str) -> None:
@@ -95,7 +106,6 @@ def invalidate_cached_credentials(cache_dir: str, kibana_url: str) -> None:
 
 def save_cached_credentials(cache_dir: str, kibana_url: str, credentials: dict[str, Any]) -> None:
     """Write credentials to cache with current timestamp."""
-    from datetime import datetime, timezone
     path = Path(cache_dir)
     path.mkdir(parents=True, exist_ok=True)
     data = {
