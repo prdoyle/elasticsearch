@@ -226,3 +226,40 @@ def test_apply_stop_policy_exactly_five_consecutive_then_success():
     assert len(entries) == 0
     assert len(errors) == 5
     assert stopped is True
+
+
+# ---- Corner cases ----
+
+
+def test_parse_cluster_list_unicode_in_url():
+    """URLs with Unicode (e.g. IDN) are kept as-is; no crash."""
+    content = "https://café.example.com\nhttps://münchen.de"
+    urls = report_builder.parse_cluster_list(content)
+    assert urls == ["https://café.example.com", "https://münchen.de"]
+
+
+def test_parse_cluster_list_url_with_path_normalized_and_deduped():
+    """URLs with path are normalized (lowercased); same URL in different case dedupes to one."""
+    content = "HTTPS://Foo.KB.Region.AWS.Elastic-Cloud.COM/App/Home\nhttps://foo.kb.region.aws.elastic-cloud.com/app/home"
+    urls = report_builder.parse_cluster_list(content)
+    assert len(urls) == 1
+    assert urls[0] == "https://foo.kb.region.aws.elastic-cloud.com/app/home"
+
+
+def test_parse_cluster_list_url_with_newline_in_line_stripped():
+    """Line with internal newline: we split by lines so one URL per line."""
+    content = "https://a.com\nhttps://b.com\n"
+    urls = report_builder.parse_cluster_list(content)
+    assert "https://a.com" in urls and "https://b.com" in urls
+
+
+def test_apply_stop_policy_max_consecutive_zero():
+    """max_consecutive_failures=0: first failure triggers stop (or no failures allowed)."""
+    results = [
+        (None, [{"cluster": "https://a.com", "error": "e1"}]),
+    ]
+    entries, errors, stopped = report_builder.apply_stop_policy(results, 0)
+    # Behavior: 0 may mean "don't stop" or "stop immediately". Document actual behavior.
+    assert len(entries) == 0
+    assert len(errors) == 1
+    assert stopped is True

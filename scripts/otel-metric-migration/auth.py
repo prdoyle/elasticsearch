@@ -75,6 +75,8 @@ def parse_and_validate_cached_credentials(
         created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
+        if created > now:
+            return None
         if (now - created).total_seconds() > ttl_seconds:
             return None
     except (ValueError, TypeError):

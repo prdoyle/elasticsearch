@@ -27,11 +27,18 @@ from typing import Any
 
 
 def normalize_kibana_url(url: str) -> str:
-    """Return a normalized Kibana base URL (strip trailing slash, no fragment)."""
+    """
+    Return a normalized Kibana base URL: strip trailing slash, no fragment,
+    scheme forced to https, entire URL lowercased for consistent dedup and comparison.
+    Paths are preserved (lowercased); not treated as an error.
+    """
     u = url.strip().rstrip("/")
-    if u.startswith("http://") or u.startswith("https://"):
-        return u
-    return "https://" + u
+    lower = u.lower()
+    if lower.startswith("https://"):
+        return lower
+    if lower.startswith("http://"):
+        return "https://" + lower[7:]
+    return "https://" + lower
 
 
 def derive_es_url(kibana_url: str) -> str:

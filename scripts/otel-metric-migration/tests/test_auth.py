@@ -143,3 +143,38 @@ def test_parse_and_validate_cached_credentials_just_over_ttl_returns_none():
     data = {"created": created.isoformat(), "credentials": {"headers": {}}}
     result = auth.parse_and_validate_cached_credentials(data, now, ttl_seconds=3600)
     assert result is None
+
+
+# ---- Corner cases ----
+
+
+def test_cluster_slug_empty_string():
+    """Empty URL produces a slug (no crash); may be degenerate."""
+    slug = auth.cluster_slug("")
+    assert isinstance(slug, str)
+    assert len(slug) >= 1
+
+
+def test_parse_and_validate_cached_credentials_created_in_future_returns_none():
+    """Cache entry with created in the future is treated as invalid."""
+    now = datetime.now(timezone.utc)
+    created = now + timedelta(seconds=3600)
+    data = {"created": created.isoformat(), "credentials": {"headers": {"Authorization": "ApiKey x"}}}
+    result = auth.parse_and_validate_cached_credentials(data, now, ttl_seconds=3600)
+    assert result is None
+
+
+def test_parse_and_validate_cached_credentials_ttl_zero_expires_immediately():
+    """ttl_seconds=0 means cache entry is always expired unless now == created."""
+    now = datetime.now(timezone.utc)
+    created = now - timedelta(seconds=1)
+    data = {"created": created.isoformat(), "credentials": {"headers": {"Authorization": "ApiKey x"}}}
+    result = auth.parse_and_validate_cached_credentials(data, now, ttl_seconds=0)
+    assert result is None
+
+
+def test_cluster_slug_no_scheme():
+    """URL with no scheme (e.g. host-only) should not crash."""
+    slug = auth.cluster_slug("foo.kb.region.aws.elastic-cloud.com")
+    assert isinstance(slug, str)
+    assert re.match(r"^[a-z0-9_.-]+_[0-9a-f]{16}$", slug) is not None

@@ -130,3 +130,121 @@ def test_parse_metrics_config_invalid_missing_new():
 def test_get_old_metric_names():
     config = [{"old": "m1", "new": "n1"}, {"old": "m2", "new": "n2"}]
     assert core.get_old_metric_names(config) == ["m1", "m2"]
+
+
+# ---- Corner cases / nasty inputs ----
+
+
+def test_normalize_kibana_url_uppercase_scheme():
+    """Uppercase HTTP/HTTPS scheme should still be recognized and normalized."""
+    assert core.normalize_kibana_url("HTTP://FOO.COM") == "https://foo.com"
+    assert core.normalize_kibana_url("HTTPS://BAR.ELASTIC-CLOUD.COM/") == "https://bar.elastic-cloud.com"
+
+
+def test_normalize_kibana_url_consistent_lowercasing_with_scheme():
+    """With scheme, entire URL is lowercased (host and path)."""
+    assert core.normalize_kibana_url("HTTPS://Foo.KB.Region.AWS.Elastic-Cloud.COM") == "https://foo.kb.region.aws.elastic-cloud.com"
+    assert core.normalize_kibana_url("HTTP://HOST.COM/App/Home") == "https://host.com/app/home"
+
+
+def test_normalize_kibana_url_consistent_lowercasing_no_scheme():
+    """Without scheme, we still lowercase so output is always consistent (no mixed case)."""
+    assert core.normalize_kibana_url("Foo.COM") == "https://foo.com"
+    assert core.normalize_kibana_url("Foo.COM/Path/To/Kibana") == "https://foo.com/path/to/kibana"
+
+
+def test_normalize_kibana_url_same_casing_dedup():
+    """Different casings of the same URL normalize to the same string (for dedup/credentials key)."""
+    variants = [
+        "https://FOO.COM",
+        "HTTPS://foo.com",
+        "https://foo.com",
+        "FOO.COM",
+        "foo.com",
+    ]
+    normalized = [core.normalize_kibana_url(v) for v in variants]
+    assert len(set(normalized)) == 1
+    assert normalized[0] == "https://foo.com"
+
+
+def test_normalize_kibana_url_with_path_not_error():
+    """URL with path is accepted; path is preserved (lowercased) and trailing slash stripped. Not an error."""
+    out = core.normalize_kibana_url("https://cluster.kb.region.aws.elastic-cloud.com/app/home/")
+    assert out == "https://cluster.kb.region.aws.elastic-cloud.com/app/home"
+    out2 = core.normalize_kibana_url("HTTP://Host.COM/App/Home")
+    assert out2 == "https://host.com/app/home"
+
+
+def test_normalize_kibana_url_path_only_no_host():
+    """Edge case: no scheme and path-like string (e.g. /app/home) becomes https:///app/home (lowercased)."""
+    out = core.normalize_kibana_url("/app/home")
+    assert out == "https:///app/home"
+
+
+def test_normalize_kibana_url_whitespace_only():
+    """Whitespace-only URL becomes https:// (edge case)."""
+    out = core.normalize_kibana_url("   \t  ")
+    assert out == "https://"
+
+
+def test_derive_es_url_kb_in_path():
+    """If .kb. appears in path or query, replace() mutates it too (global replace)."""
+    url = "https://cluster.kb.region.aws.elastic-cloud.com/api/.kb./export"
+    out = core.derive_es_url(url)
+    assert ".es." in out
+    assert out == "https://cluster.es.region.aws.elastic-cloud.com/api/.es./export"
+
+
+def test_get_title_from_object_attributes_not_dict():
+    """attributes as list or string should not crash; return empty title."""
+    assert core.get_title_from_object({"attributes": []}) == ""
+    assert core.get_title_from_object({"attributes": "x"}) == ""
+    assert core.get_title_from_object({"attributes": None}) == ""
+
+
+def test_scan_saved_object_empty_string_metric_matches_everywhere():
+    """Empty string in old_metrics is substring of every string -> many matches."""
+    obj = {"a": "hello", "b": "world"}
+    refs = core.scan_saved_object(obj, [""])
+    assert len(refs) == 1
+    assert refs[0]["old_metric"] == ""
+    assert len(refs[0]["locations"]) == 2
+
+
+def test_scan_saved_object_substring_false_positive():
+    """Substring match: 'cpu' matches inside 'system.cpu.usage' and 'my_cpu_field'."""
+    obj = {"attributes": {"visState": '{"field":"system.cpu.usage","other":"my_cpu_field"}'}}
+    refs = core.scan_saved_object(obj, ["cpu"])
+    assert len(refs) == 1
+    assert refs[0]["old_metric"] == "cpu"
+    assert len(refs[0]["locations"]) >= 1
+
+
+def test_scan_saved_object_single_dot_matches_strings_containing_dot():
+    """Metric '.' matches any string containing a literal dot (plain 'in' check, not regex)."""
+    obj = {"attributes": {"title": "CPU usage", "visState": "{\"field\":\"system.cpu\"}"}}
+    refs = core.scan_saved_object(obj, ["."])
+    assert len(refs) == 1
+    assert refs[0]["old_metric"] == "."
+    assert len(refs[0]["locations"]) >= 1
+
+
+def test_parse_metrics_config_empty_string_rejected():
+    """Empty string 'old' or 'new' is rejected."""
+    with pytest.raises(ValueError, match="non-empty"):
+        core.parse_metrics_config([{"old": "", "new": "n"}])
+    with pytest.raises(ValueError, match="non-empty"):
+        core.parse_metrics_config([{"old": "o", "new": ""}])
+
+
+def test_parse_metrics_config_whitespace_only_accepted():
+    """Whitespace-only 'old'/'new' is truthy and currently accepted (no strip)."""
+    parsed = core.parse_metrics_config([{"old": "  ", "new": "  "}])
+    assert parsed == [{"old": "  ", "new": "  "}]
+
+
+def test_build_full_report_empty_clusters():
+    """Empty clusters list is valid."""
+    report = core.build_full_report([], [{"old": "m", "new": "n"}], generated_at="2025-01-01T00:00:00Z")
+    assert report["clusters"] == []
+    assert report["metrics_config_used"] == [{"old": "m", "new": "n"}]
