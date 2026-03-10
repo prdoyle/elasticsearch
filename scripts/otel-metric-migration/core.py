@@ -24,21 +24,25 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 
 def normalize_kibana_url(url: str) -> str:
     """
     Return a normalized Kibana base URL: strip trailing slash, no fragment,
-    scheme forced to https, entire URL lowercased for consistent dedup and comparison.
-    Paths are preserved (lowercased); not treated as an error.
+    scheme forced to https, host (authority) lowercased. Path and query case
+    are preserved (RFC 3986 allows them to be case-sensitive).
+    Scheme is required (https:// or http://); raises ValueError if missing.
     """
     u = url.strip().rstrip("/")
-    lower = u.lower()
-    if lower.startswith("https://"):
-        return lower
-    if lower.startswith("http://"):
-        return "https://" + lower[7:]
-    return "https://" + lower
+    parsed = urlparse(u)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("Kibana URL must include a scheme (https:// or http://) and host")
+    netloc = parsed.netloc.lower()
+    path = parsed.path or ""
+    if parsed.query:
+        path = path + "?" + parsed.query
+    return "https://" + netloc + path if path else "https://" + netloc
 
 
 def derive_es_url(kibana_url: str) -> str:

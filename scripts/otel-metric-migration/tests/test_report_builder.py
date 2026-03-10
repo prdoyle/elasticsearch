@@ -239,11 +239,11 @@ def test_parse_cluster_list_unicode_in_url():
 
 
 def test_parse_cluster_list_url_with_path_normalized_and_deduped():
-    """URLs with path are normalized (lowercased); same URL in different case dedupes to one."""
-    content = "HTTPS://Foo.KB.Region.AWS.Elastic-Cloud.COM/App/Home\nhttps://foo.kb.region.aws.elastic-cloud.com/app/home"
+    """URLs with path: host/scheme normalized (lowercased), path case preserved; same URL dedupes to one."""
+    content = "HTTPS://Foo.KB.Region.AWS.Elastic-Cloud.COM/App/Home\nhttps://foo.kb.region.aws.elastic-cloud.com/App/Home"
     urls = report_builder.parse_cluster_list(content)
     assert len(urls) == 1
-    assert urls[0] == "https://foo.kb.region.aws.elastic-cloud.com/app/home"
+    assert urls[0] == "https://foo.kb.region.aws.elastic-cloud.com/App/Home"
 
 
 def test_parse_cluster_list_url_with_newline_in_line_stripped():

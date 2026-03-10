@@ -26,7 +26,6 @@ def test_normalize_kibana_url():
     assert core.normalize_kibana_url("https://foo.kb.region.aws.elastic-cloud.com") == "https://foo.kb.region.aws.elastic-cloud.com"
     assert core.normalize_kibana_url("https://foo.kb.region.aws.elastic-cloud.com/") == "https://foo.kb.region.aws.elastic-cloud.com"
     assert core.normalize_kibana_url("  https://foo.com/  ") == "https://foo.com"
-    assert core.normalize_kibana_url("foo.com") == "https://foo.com"
 
 
 def test_derive_es_url():
@@ -142,25 +141,28 @@ def test_normalize_kibana_url_uppercase_scheme():
 
 
 def test_normalize_kibana_url_consistent_lowercasing_with_scheme():
-    """With scheme, entire URL is lowercased (host and path)."""
+    """With scheme, host is lowercased; path case is preserved (RFC 3986 path can be case-sensitive)."""
     assert core.normalize_kibana_url("HTTPS://Foo.KB.Region.AWS.Elastic-Cloud.COM") == "https://foo.kb.region.aws.elastic-cloud.com"
-    assert core.normalize_kibana_url("HTTP://HOST.COM/App/Home") == "https://host.com/app/home"
+    assert core.normalize_kibana_url("HTTP://HOST.COM/App/Home") == "https://host.com/App/Home"
 
 
-def test_normalize_kibana_url_consistent_lowercasing_no_scheme():
-    """Without scheme, we still lowercase so output is always consistent (no mixed case)."""
-    assert core.normalize_kibana_url("Foo.COM") == "https://foo.com"
-    assert core.normalize_kibana_url("Foo.COM/Path/To/Kibana") == "https://foo.com/path/to/kibana"
+def test_normalize_kibana_url_no_scheme_raises():
+    """Scheme is mandatory; URL without scheme raises ValueError."""
+    with pytest.raises(ValueError, match="scheme"):
+        core.normalize_kibana_url("Foo.COM")
+    with pytest.raises(ValueError, match="scheme"):
+        core.normalize_kibana_url("Foo.COM/Path/To/Kibana")
+    with pytest.raises(ValueError, match="scheme"):
+        core.normalize_kibana_url("foo.com")
 
 
 def test_normalize_kibana_url_same_casing_dedup():
-    """Different casings of the same URL normalize to the same string (for dedup/credentials key)."""
+    """Different casings of the same URL (with scheme) normalize to the same string."""
     variants = [
         "https://FOO.COM",
         "HTTPS://foo.com",
         "https://foo.com",
-        "FOO.COM",
-        "foo.com",
+        "HTTP://foo.com",
     ]
     normalized = [core.normalize_kibana_url(v) for v in variants]
     assert len(set(normalized)) == 1
@@ -168,23 +170,57 @@ def test_normalize_kibana_url_same_casing_dedup():
 
 
 def test_normalize_kibana_url_with_path_not_error():
-    """URL with path is accepted; path is preserved (lowercased) and trailing slash stripped. Not an error."""
+    """URL with path is accepted; path case preserved, trailing slash stripped. Not an error."""
     out = core.normalize_kibana_url("https://cluster.kb.region.aws.elastic-cloud.com/app/home/")
     assert out == "https://cluster.kb.region.aws.elastic-cloud.com/app/home"
     out2 = core.normalize_kibana_url("HTTP://Host.COM/App/Home")
-    assert out2 == "https://host.com/app/home"
+    assert out2 == "https://host.com/App/Home"
 
 
-def test_normalize_kibana_url_path_only_no_host():
-    """Edge case: no scheme and path-like string (e.g. /app/home) becomes https:///app/home (lowercased)."""
-    out = core.normalize_kibana_url("/app/home")
-    assert out == "https:///app/home"
+def test_normalize_kibana_url_path_case_preserved():
+    """Path and query case are never lowercased; only scheme and host are (RFC 3986)."""
+    assert core.normalize_kibana_url("HTTPS://Host.com/App/Home") == "https://host.com/App/Home"
+    assert core.normalize_kibana_url("https://host.com/API/V1/Export") == "https://host.com/API/V1/Export"
 
 
-def test_normalize_kibana_url_whitespace_only():
-    """Whitespace-only URL becomes https:// (edge case)."""
-    out = core.normalize_kibana_url("   \t  ")
-    assert out == "https://"
+def test_normalize_kibana_url_query_preserved():
+    """Query string is preserved (case and encoding); host lowercased only."""
+    assert core.normalize_kibana_url("https://Host.com/app?foo=bar") == "https://host.com/app?foo=bar"
+    assert core.normalize_kibana_url("https://Host.com?Key=Val&other=value") == "https://host.com?Key=Val&other=value"
+
+
+def test_normalize_kibana_url_query_corner_cases():
+    """Query corner cases: encoding, empty params, reserved chars, fragment stripped."""
+    # URL-encoded values preserved as-is (no decode/reencode)
+    out = core.normalize_kibana_url("https://foo.com/path?x=%2F%2F&y=hello%20world")
+    assert out == "https://foo.com/path?x=%2F%2F&y=hello%20world"
+    # Double-encoding (mistake): preserved literally
+    out = core.normalize_kibana_url("https://foo.com?a=%252F")
+    assert out == "https://foo.com?a=%252F"
+    # Empty param value
+    out = core.normalize_kibana_url("https://foo.com?a=&b=1")
+    assert out == "https://foo.com?a=&b=1"
+    # Value containing unencoded = (ambiguous but preserved)
+    out = core.normalize_kibana_url("https://foo.com?key=val=with=equals")
+    assert "key=val=with=equals" in out or out == "https://foo.com?key=val=with=equals"
+    # Fragment is stripped (not included in normalized URL)
+    out = core.normalize_kibana_url("https://foo.com/path?q=1#section")
+    assert out == "https://foo.com/path?q=1"
+    assert "#" not in out
+
+
+def test_normalize_kibana_url_no_scheme_path_only_raises():
+    """Path-only (no scheme, no host) raises ValueError."""
+    with pytest.raises(ValueError, match="scheme"):
+        core.normalize_kibana_url("/App/Home")
+    with pytest.raises(ValueError, match="scheme"):
+        core.normalize_kibana_url("/app/home")
+
+
+def test_normalize_kibana_url_whitespace_only_raises():
+    """Whitespace-only URL has no scheme and raises ValueError."""
+    with pytest.raises(ValueError, match="scheme"):
+        core.normalize_kibana_url("   \t  ")
 
 
 def test_derive_es_url_kb_in_path():
