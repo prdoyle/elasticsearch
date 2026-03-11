@@ -114,16 +114,16 @@ def process_cluster(
     api_key_page_url = _api_key_page_url(cluster_url)
 
     def _prompt_and_save_then_retry_export(retry_exception: Exception):
-        pasted = collect_api_key_fn(api_key_page_url)
-        if not pasted:
+        api_key = collect_api_key_fn(api_key_page_url)
+        if not api_key:
             return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_exception)}]
-        creds = auth.get_credentials_from_api_key(pasted)
+        creds = auth.get_credentials_from_api_key(api_key)
         try:
             objects = export_fn(cluster_url, creds)
             entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
             url = core.normalize_kibana_url(cluster_url)
-            credentials_map[url] = pasted
-            _save_credentials_to_file(api_keys_path, cluster_url, pasted)
+            credentials_map[url] = api_key
+            _save_credentials_to_file(api_keys_path, cluster_url, api_key)
             return entry, []
         except Exception as third_e:
             return None, [{"cluster": cluster_url, "phase": "export", "error": str(third_e)}]
@@ -131,12 +131,12 @@ def process_cluster(
     try:
         creds = get_credentials_fn(cluster_url)
     except RuntimeError as e:
-        pasted = collect_api_key_fn(api_key_page_url)
-        if not pasted:
+        api_key = collect_api_key_fn(api_key_page_url)
+        if not api_key:
             return None, [{"cluster": cluster_url, "phase": "auth", "error": str(e)}]
         url = core.normalize_kibana_url(cluster_url)
-        credentials_map[url] = pasted
-        _save_credentials_to_file(api_keys_path, cluster_url, pasted)
+        credentials_map[url] = api_key
+        _save_credentials_to_file(api_keys_path, cluster_url, api_key)
         try:
             creds = get_credentials_fn(cluster_url)
         except Exception as retry_e:
