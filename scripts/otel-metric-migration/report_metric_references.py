@@ -45,7 +45,7 @@ def load_cluster_list(path: str) -> list[str]:
     return report_builder.parse_cluster_list(Path(path).read_text())
 
 
-def load_metrics_config(path: str) -> list[dict[str, str]]:
+def load_metrics_config(path: str) -> list[dict[str, Any]]:
     """Load and validate metrics config JSON."""
     data = json.loads(Path(path).read_text())
     return core.parse_metrics_config(data)
@@ -112,7 +112,7 @@ def _write_status(message: str, stream: Any) -> None:
 def process_cluster(
     cluster_url: str,
     old_metrics: list[str],
-    metrics_config: list[dict[str, str]],
+    metrics_config: list[dict[str, Any]],
     get_credentials_fn: Callable[[str], dict[str, Any]],
     export_fn: Callable[[str, dict[str, Any]], Any],
     api_keys_path: str | Path,
@@ -174,7 +174,7 @@ def process_cluster(
 
 def run(
     clusters: list[str],
-    metrics_config: list[dict[str, str]],
+    metrics_config: list[dict[str, Any]],
     output_dir: str,
     credentials_map: dict[str, str],
     api_keys_path: str | Path,

@@ -170,7 +170,7 @@ def test_build_full_report():
         core.build_cluster_entry("https://a.example.com", []),
         core.build_cluster_entry("https://b.example.com", [{"type": "dashboard", "id": "1", "title": "X", "metric_references": []}]),
     ]
-    metrics_config = [{"old": "m1", "new": "m1.new"}]
+    metrics_config = [{"old": "m1", "new": {"name": "m1.new", "dimensions": {}}}]
     report = core.build_full_report(clusters_data, metrics_config, generated_at="2025-01-01T00:00:00Z")
     assert report["clusters"] == clusters_data
     assert report["metrics_config_used"] == metrics_config
@@ -178,9 +178,15 @@ def test_build_full_report():
 
 
 def test_parse_metrics_config():
-    config = [{"old": "a", "new": "b"}, {"old": "c", "new": "d"}]
+    config = [
+        {"old": "a", "new": {"name": "b", "dimensions": {}}},
+        {"old": "c", "new": {"name": "d", "dimensions": {}}},
+    ]
     parsed = core.parse_metrics_config(config)
-    assert parsed == [{"old": "a", "new": "b"}, {"old": "c", "new": "d"}]
+    assert parsed == [
+        {"old": "a", "new": {"name": "b", "dimensions": {}}},
+        {"old": "c", "new": {"name": "d", "dimensions": {}}},
+    ]
 
 
 def test_parse_metrics_config_invalid_not_list():
@@ -194,12 +200,38 @@ def test_parse_metrics_config_invalid_missing_old():
 
 
 def test_parse_metrics_config_invalid_missing_new():
-    with pytest.raises(ValueError, match="non-empty 'new'"):
+    with pytest.raises(ValueError, match="'new' as an object"):
         core.parse_metrics_config([{"old": "a"}])
 
 
+def test_parse_metrics_config_new_not_object_raises():
+    with pytest.raises(ValueError, match="'new' as an object"):
+        core.parse_metrics_config([{"old": "a", "new": "b"}])
+    with pytest.raises(ValueError, match="'new' as an object"):
+        core.parse_metrics_config([{"old": "a", "new": 123}])
+
+
+def test_parse_metrics_config_new_object_missing_name_raises():
+    with pytest.raises(ValueError, match="non-empty 'name'"):
+        core.parse_metrics_config([{"old": "a", "new": {"dimensions": {}}}])
+
+
+def test_parse_metrics_config_new_object_empty_name_raises():
+    with pytest.raises(ValueError, match="non-empty 'name'"):
+        core.parse_metrics_config([{"old": "a", "new": {"name": "", "dimensions": {}}}])
+
+
+def test_parse_metrics_config_with_dimensions():
+    config = [{"old": "heap.used", "new": {"name": "jvm.memory.used", "dimensions": {"jvm.memory.type": "heap"}}}]
+    parsed = core.parse_metrics_config(config)
+    assert parsed[0]["new"] == {"name": "jvm.memory.used", "dimensions": {"jvm.memory.type": "heap"}}
+
+
 def test_get_old_metric_names():
-    config = [{"old": "m1", "new": "n1"}, {"old": "m2", "new": "n2"}]
+    config = [
+        {"old": "m1", "new": {"name": "n1", "dimensions": {}}},
+        {"old": "m2", "new": {"name": "n2", "dimensions": {}}},
+    ]
     assert core.get_old_metric_names(config) == ["m1", "m2"]
 
 
@@ -338,21 +370,22 @@ def test_scan_saved_object_single_dot_matches_strings_containing_dot():
 
 
 def test_parse_metrics_config_empty_string_rejected():
-    """Empty string 'old' or 'new' is rejected."""
-    with pytest.raises(ValueError, match="non-empty"):
-        core.parse_metrics_config([{"old": "", "new": "n"}])
-    with pytest.raises(ValueError, match="non-empty"):
-        core.parse_metrics_config([{"old": "o", "new": ""}])
+    """Empty string 'old' or 'new.name' is rejected."""
+    with pytest.raises(ValueError, match="non-empty 'old'"):
+        core.parse_metrics_config([{"old": "", "new": {"name": "n", "dimensions": {}}}])
+    with pytest.raises(ValueError, match="non-empty 'name'"):
+        core.parse_metrics_config([{"old": "o", "new": {"name": "", "dimensions": {}}}])
 
 
 def test_parse_metrics_config_whitespace_only_accepted():
-    """Whitespace-only 'old'/'new' is truthy and currently accepted (no strip)."""
-    parsed = core.parse_metrics_config([{"old": "  ", "new": "  "}])
-    assert parsed == [{"old": "  ", "new": "  "}]
+    """Whitespace-only 'old'/'name' is truthy and currently accepted (no strip)."""
+    parsed = core.parse_metrics_config([{"old": "  ", "new": {"name": "  ", "dimensions": {}}}])
+    assert parsed == [{"old": "  ", "new": {"name": "  ", "dimensions": {}}}]
 
 
 def test_build_full_report_empty_clusters():
     """Empty clusters list is valid."""
-    report = core.build_full_report([], [{"old": "m", "new": "n"}], generated_at="2025-01-01T00:00:00Z")
+    metrics_config = [{"old": "m", "new": {"name": "n", "dimensions": {}}}]
+    report = core.build_full_report([], metrics_config, generated_at="2025-01-01T00:00:00Z")
     assert report["clusters"] == []
-    assert report["metrics_config_used"] == [{"old": "m", "new": "n"}]
+    assert report["metrics_config_used"] == metrics_config

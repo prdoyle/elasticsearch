@@ -1,4 +1,4 @@
 [
-  { "old": "system.cpu.usage", "new": "system.cpu.utilization" },
-  { "old": "system.memory.usage", "new": "system.memory.utilization" }
+  { "old": "system.cpu.usage", "new": { "name": "system.cpu.utilization", "dimensions": {} } },
+  { "old": "system.memory.usage", "new": { "name": "system.memory.utilization", "dimensions": {} } }
 ]

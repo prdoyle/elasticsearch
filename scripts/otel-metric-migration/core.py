@@ -167,7 +167,7 @@ def build_cluster_entry(
 
 def build_full_report(
     clusters_data: list[dict[str, Any]],
-    metrics_config: list[dict[str, str]],
+    metrics_config: list[dict[str, Any]],
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -183,10 +183,10 @@ def build_full_report(
     }
 
 
-def parse_metrics_config(config_json: list[Any]) -> list[dict[str, str]]:
+def parse_metrics_config(config_json: list[Any]) -> list[dict[str, Any]]:
     """
-    Parse and validate metrics config. Expects list of { "old": str, "new": str }.
-    Returns the list; raises ValueError if invalid.
+    Parse and validate metrics config. Expects list of { "old": str, "new": { "name": str, "dimensions"?: dict } }.
+    Returns the list with each "new" normalized to have "name" and "dimensions" (default {}); raises ValueError if invalid.
     """
     if not isinstance(config_json, list):
         raise ValueError("metrics config must be a JSON array")
@@ -198,12 +198,26 @@ def parse_metrics_config(config_json: list[Any]) -> list[dict[str, str]]:
         new_val = item.get("new")
         if not isinstance(old_val, str) or not old_val:
             raise ValueError(f"metrics config[{i}] must have non-empty 'old' string")
-        if not isinstance(new_val, str) or not new_val:
-            raise ValueError(f"metrics config[{i}] must have non-empty 'new' string")
-        result.append({"old": old_val, "new": new_val})
+        if not isinstance(new_val, dict):
+            raise ValueError(f"metrics config[{i}] must have 'new' as an object with 'name' and optional 'dimensions'")
+        name = new_val.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"metrics config[{i}].new must have non-empty 'name' string")
+        dimensions = new_val.get("dimensions")
+        if dimensions is None:
+            dimensions = {}
+        if not isinstance(dimensions, dict):
+            raise ValueError(f"metrics config[{i}].new 'dimensions' must be an object")
+        # Normalize dimension values to strings for consistent JSON round-trip
+        dim_out = {}
+        for k, v in dimensions.items():
+            if not isinstance(k, str):
+                raise ValueError(f"metrics config[{i}].new dimensions keys must be strings")
+            dim_out[k] = str(v) if not isinstance(v, str) else v
+        result.append({"old": old_val, "new": {"name": name, "dimensions": dim_out}})
     return result
 
 
-def get_old_metric_names(metrics_config: list[dict[str, str]]) -> list[str]:
+def get_old_metric_names(metrics_config: list[dict[str, Any]]) -> list[str]:
     """Return the list of old metric names from a parsed metrics config."""
     return [m["old"] for m in metrics_config]

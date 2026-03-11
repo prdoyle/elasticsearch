@@ -64,16 +64,23 @@ def parse_credentials_map(data: Any) -> dict[str, str]:
     }
 
 
+def _metric_object_sort_key(m: dict[str, Any]) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """Sort key for a metric object: by name, then by sorted dimension items."""
+    name = m["name"]
+    dims = m.get("dimensions") or {}
+    return (name, tuple(sorted(dims.items())))
+
+
 def objects_to_cluster_entry(
     cluster_url: str,
     objects: Iterable[dict[str, Any]],
     old_metrics: list[str],
-    metrics_config: list[dict[str, str]],
+    metrics_config: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """
     Build a single cluster report entry from an iterable of saved-object dicts.
     Only objects that reference at least one old metric are included.
-    Each metric_reference includes new_metric from metrics_config for automation.
+    Each metric_reference includes new_metric (object with name and dimensions) from metrics_config.
     """
     old_to_new = {m["old"]: m["new"] for m in metrics_config}
     objects_with_refs = []
@@ -81,7 +88,10 @@ def objects_to_cluster_entry(
         refs = core.scan_saved_object(obj, old_metrics)
         if refs:
             for ref in refs:
-                ref["new_metric"] = old_to_new.get(ref["old_metric"], ref["old_metric"])
+                new_obj = old_to_new.get(ref["old_metric"])
+                if new_obj is None:
+                    new_obj = {"name": ref["old_metric"], "dimensions": {}}
+                ref["new_metric"] = new_obj
             obj_type = obj.get("type", "")
             obj_id = obj.get("id", "")
             entry = {
@@ -94,13 +104,16 @@ def objects_to_cluster_entry(
             if view_url is not None:
                 entry["view_url"] = view_url
             objects_with_refs.append(entry)
-    new_metrics = sorted(
-        set(
-            ref["new_metric"]
-            for obj in objects_with_refs
-            for ref in obj["metric_references"]
-        )
-    )
+    seen: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
+    unique_metrics: list[dict[str, Any]] = []
+    for obj in objects_with_refs:
+        for ref in obj["metric_references"]:
+            m = ref["new_metric"]
+            key = (m["name"], tuple(sorted((m.get("dimensions") or {}).items())))
+            if key not in seen:
+                seen.add(key)
+                unique_metrics.append(m)
+    new_metrics = sorted(unique_metrics, key=_metric_object_sort_key)
     entry = core.build_cluster_entry(cluster_url, objects_with_refs)
     entry["new_metrics"] = new_metrics
     return entry

@@ -105,7 +105,7 @@ def test_process_cluster_401_user_pastes_key_second_export_succeeds(tmp_path):
 
     credentials_map = {}
 
-    metrics_config = [{"old": "system.cpu.usage", "new": "system.cpu.usage.new"}]
+    metrics_config = [{"old": "system.cpu.usage", "new": {"name": "system.cpu.usage.new", "dimensions": {}}}]
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         old_metrics,
@@ -135,7 +135,7 @@ def test_process_cluster_401_user_skips_empty_key(tmp_path):
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
-        [{"old": "m1", "new": "m1.new"}],
+        [{"old": "m1", "new": {"name": "m1.new", "dimensions": {}}}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -161,7 +161,7 @@ def test_process_cluster_401_user_pastes_key_third_export_still_fails(tmp_path):
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
-        [{"old": "m1", "new": "m1.new"}],
+        [{"old": "m1", "new": {"name": "m1.new", "dimensions": {}}}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -187,7 +187,7 @@ def test_process_cluster_401_collect_api_key_returns_empty_returns_error(tmp_pat
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
-        [{"old": "m1", "new": "m1.new"}],
+        [{"old": "m1", "new": {"name": "m1.new", "dimensions": {}}}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -215,7 +215,7 @@ def test_process_cluster_401_pasted_key_success_writes_api_keys_file(tmp_path):
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
-        [{"old": "m1", "new": "m1.new"}],
+        [{"old": "m1", "new": {"name": "m1.new", "dimensions": {}}}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -246,7 +246,7 @@ def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_en
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
-        [{"old": "m1", "new": "m1.new"}],
+        [{"old": "m1", "new": {"name": "m1.new", "dimensions": {}}}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -277,7 +277,7 @@ def test_run_creates_latest_symlink(tmp_path):
             mock_dt.now.return_value = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
             report_metric_references.run(
                 clusters=["https://x.com"],
-                metrics_config=[{"old": "m1", "new": "m2"}],
+                metrics_config=[{"old": "m1", "new": {"name": "m2", "dimensions": {}}}],
                 output_dir=str(output_dir),
                 credentials_map={},
                 api_keys_path=tmp_path / "api-keys.json",
