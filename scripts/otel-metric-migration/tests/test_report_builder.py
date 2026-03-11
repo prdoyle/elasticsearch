@@ -137,7 +137,7 @@ def test_objects_to_cluster_entry_one_object_with_ref():
     assert entry["saved_objects"][0]["type"] == "dashboard"
     assert entry["saved_objects"][0]["id"] == "d1"
     assert entry["saved_objects"][0]["title"] == "CPU"
-    assert entry["saved_objects"][0]["view_url"] == "https://a.com/app/dashboards#/view/d1"
+    assert entry["saved_objects"][0]["view_url"] == "https://a.com/api/saved_objects/dashboard/d1"
     assert entry["saved_objects"][0]["metric_references"][0]["old_metric"] == "system.cpu.usage"
 
 
@@ -155,8 +155,23 @@ def test_objects_to_cluster_entry_two_objects_one_with_refs():
     )
     assert len(entry["saved_objects"]) == 1
     assert entry["saved_objects"][0]["type"] == "visualization"
-    assert entry["saved_objects"][0]["view_url"] == "https://a.com/app/visualize#/edit/v1"
+    assert entry["saved_objects"][0]["view_url"] == "https://a.com/api/saved_objects/visualization/v1"
     assert entry["saved_objects"][0]["metric_references"][0]["old_metric"] == "system.memory.usage"
+
+
+def test_objects_to_cluster_entry_object_with_empty_id_omits_view_url():
+    objects = [
+        {
+            "type": "dashboard",
+            "id": "",
+            "attributes": {"title": "No id", "visState": '{"field":"system.cpu.usage"}'},
+        },
+    ]
+    entry = report_builder.objects_to_cluster_entry(
+        "https://a.com", objects, ["system.cpu.usage"]
+    )
+    assert len(entry["saved_objects"]) == 1
+    assert "view_url" not in entry["saved_objects"][0]
 
 
 # ---- apply_stop_policy ----

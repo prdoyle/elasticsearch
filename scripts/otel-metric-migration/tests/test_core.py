@@ -34,27 +34,27 @@ def test_derive_es_url():
 
 def test_saved_object_view_url_dashboard():
     url = core.saved_object_view_url("https://foo.kb.example.com", "dashboard", "dash-123")
-    assert url == "https://foo.kb.example.com/app/dashboards#/view/dash-123"
+    assert url == "https://foo.kb.example.com/api/saved_objects/dashboard/dash-123"
 
 
 def test_saved_object_view_url_visualization():
     url = core.saved_object_view_url("https://host.com", "visualization", "vis-456")
-    assert url == "https://host.com/app/visualize#/edit/vis-456"
+    assert url == "https://host.com/api/saved_objects/visualization/vis-456"
 
 
 def test_saved_object_view_url_lens():
     url = core.saved_object_view_url("https://host.com/", "lens", "len-789")
-    assert url == "https://host.com/app/lens#/edit/len-789"
+    assert url == "https://host.com/api/saved_objects/lens/len-789"
 
 
-def test_saved_object_view_url_unknown_type_uses_fallback():
+def test_saved_object_view_url_unknown_type_uses_api():
     url = core.saved_object_view_url("https://host.com", "search", "s1")
-    assert url == "https://host.com/app/management/kibana/objects"
+    assert url == "https://host.com/api/saved_objects/search/s1"
 
 
-def test_saved_object_view_url_empty_id_uses_fallback():
+def test_saved_object_view_url_empty_id_returns_none():
     url = core.saved_object_view_url("https://host.com", "dashboard", "")
-    assert url == "https://host.com/app/management/kibana/objects"
+    assert url is None
 
 
 def test_scan_saved_object_empty_metrics():

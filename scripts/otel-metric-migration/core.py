@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 
 def normalize_kibana_url(url: str) -> str:
@@ -51,26 +51,19 @@ def derive_es_url(kibana_url: str) -> str:
     return kibana_url.replace(".kb.", ".es.")
 
 
-# Kibana app paths for opening a saved object in the UI. {id} is replaced with the object id.
-# Unknown types fall back to the saved objects management page.
-_SAVED_OBJECT_VIEW_PATHS: dict[str, str] = {
-    "dashboard": "/app/dashboards#/view/{id}",
-    "visualization": "/app/visualize#/edit/{id}",
-    "lens": "/app/lens#/edit/{id}",
-}
-_FALLBACK_VIEW_PATH = "/app/management/kibana/objects"
-
-
-def saved_object_view_url(cluster_url: str, object_type: str, object_id: str) -> str:
+def saved_object_view_url(cluster_url: str, object_type: str, object_id: str) -> str | None:
     """
-    Return a Kibana URL that opens the given saved object in the UI.
-    Uses app-specific paths for dashboard, visualization, lens; unknown types
-    use the saved objects management page.
+    Return a Kibana URL for the given saved object, or None if there is no useful URL.
+    Uses the saved objects API (GET /api/saved_objects/{type}/{id}), which returns
+    JSON when called with the same API key used for the script. Returns None when
+    object_id is empty so callers can omit view_url rather than emitting a generic link.
     """
+    if not object_id:
+        return None
     base = normalize_kibana_url(cluster_url).rstrip("/")
-    path_template = _SAVED_OBJECT_VIEW_PATHS.get(object_type, _FALLBACK_VIEW_PATH)
-    path = path_template.format(id=object_id) if object_id else _FALLBACK_VIEW_PATH
-    return base + path
+    quoted_type = quote(object_type, safe="")
+    quoted_id = quote(object_id, safe="")
+    return base + f"/api/saved_objects/{quoted_type}/{quoted_id}"
 
 
 def _find_metrics_in_string(value: str, old_metrics: list[str]) -> list[tuple[str, str]]:
