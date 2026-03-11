@@ -1,0 +1,4 @@
+steps:
+  - report:
+      clusters: qa-clusters.txt
+      metrics: metrics_config.json

@@ -6,15 +6,17 @@ This directory is **phase 1** of an OTel metric migration: a **read-only** repor
 
 ## Entry point
 
-- **`report_metric_references.py`** – The only script you run. It has the shebang and `if __name__ == "__main__"`. All other `.py` files here are helper libraries.
+- **`omm.py`** and the **`omm`** bash wrapper – Preferred way to run a pipeline from a YAML preset (e.g. `omm qa-report.yaml`). The wrapper runs `omm.py` in the venv and passes arguments through.
+- **`report_metric_references.py`** – Can still be run directly for the legacy CLI (`--clusters`, `--metrics`). All other `.py` files are helper libraries.
 
 ## Design: logic vs I/O and unit testing
 
 We separate **pure logic** from **I/O and side effects** so that business rules and branching can be **unit-tested to the greatest possible extent** without touching the network, filesystem, or browser.
 
-- **Pure logic** lives in dedicated modules (`core`, `report_builder`, and the testable parts of `auth`). These functions take in-memory inputs (strings, dicts, lists) and return in-memory outputs. They do not read files, open sockets, or launch browsers. All such code is covered by unit tests in `tests/test_*.py` with no mocks of real services: we just call the functions with crafted data and assert on return values.
+- **Pure logic** lives in dedicated modules (`core`, `report_builder`, `pipeline`, and the testable parts of `auth`). These functions take in-memory inputs (strings, dicts, lists) and return in-memory outputs. They do not read files, open sockets, or launch browsers. All such code is covered by unit tests in `tests/test_*.py` with no mocks of real services: we just call the functions with crafted data and assert on return values.
 - **I/O and side effects** are confined to thin wrappers or the main script: file read/write, HTTP calls, etc. The main orchestration code (`report_metric_references.run`, `process_cluster`) receives **injectable** dependencies (e.g. `get_credentials_fn`, `export_fn`, `collect_api_key_fn`) so that tests can supply fakes without doing real I/O. **collect_api_key_fn** is responsible for deciding whether to prompt: the default implementation `_collect_api_key_via_browser` checks `sys.stdin.isatty()` and returns `""` after printing a hint when not interactive; when interactive it opens the browser and prompts for a pasted key. There is no separate `interactive` parameter—the callable encapsulates that decision.
-- **Result:** The vast majority of behavior—URL normalization, config parsing, scan logic, stop policy, credential validation, cache TTL—is covered by fast, deterministic unit tests. Only the thin I/O layers and integration-style flows are left to manual or integration testing.
+- **Straight-line orchestration** (e.g. load file → parse → loop and dispatch) that is **intermingled with I/O** is not expected to be unit tested. We extract testable logic into pure functions and test those; the thin wiring in the main script either works or doesn’t and is left to manual or integration checks if needed.
+- **Result:** The vast majority of behavior—URL normalization, config parsing, scan logic, stop policy, credential validation, cache TTL, pipeline and preset-filename parsing—is covered by fast, deterministic unit tests. Only the thin I/O layers and integration-style flows are left to manual or integration testing.
 
 | Module | Role | Pure (tested) | I/O (not unit tested) |
 |--------|------|----------------|------------------------|
@@ -22,6 +24,7 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 | **report_builder** | Parse cluster list and credentials file content; turn a stream of saved objects into one cluster entry; apply “stop after N consecutive failures” over results. | Yes – all of it. | None. |
 | **auth** | Resolve credentials from API key map only. Build credential dicts; cluster slug (for tests). | `cluster_slug`, `get_credentials_from_api_key`, `get_credentials`. | None. |
 | **kibana_client** | POST Kibana saved-objects export, stream NDJSON, yield parsed objects. | None. | HTTP only. |
+| **pipeline** | Parse preset YAML into (verb, config) steps; validate report config; resolve preset filename (add .yaml, reject path separators). | Yes – all of it. | None. |
 | **report_metric_references** | CLI, load config files, loop over clusters, call auth and export, collect results, write report and errors JSON. | None. | File read/write; delegates to auth and kibana_client. |
 
 ## Flow
@@ -47,7 +50,8 @@ For each cluster URL:
 
 ## Running and testing
 
-- **Run:** From this directory: `python report_metric_references.py --clusters ... --metrics ...` (see README for full options).
+- **Do not run scripts for real to verify behavior.** Scripts in this directory issue HTTP requests to Kibana/Elasticsearch. Do not run them against real or active clusters to check that code works. Rely on the **automated test suite** (`pytest tests/ -v`) instead. Manual runs are for the operator when they intend to hit real clusters with appropriate config.
+- **Run:** From this directory: `omm <preset>.yaml` (e.g. `omm qa-report.yaml`) or `python report_metric_references.py --clusters ... --metrics ...` for the legacy CLI (see README for full options).
 - **Tests:** `pytest tests/ -v`. Tests use in-memory data only; no network, no browser, no real cache files. conftest.py adds this directory to `sys.path` so `import core`, `import auth`, etc. work.
 
 ## Conventions
