@@ -52,7 +52,7 @@ def load_metrics_config(path: str) -> list[dict[str, str]]:
 
 
 def load_credentials_map(path: str) -> dict[str, str]:
-    """Load optional credentials file: JSON object mapping Kibana URL -> API key."""
+    """Load API keys file: JSON object mapping Kibana URL -> API key."""
     data = json.loads(Path(path).read_text())
     return report_builder.parse_credentials_map(data)
 
@@ -64,9 +64,9 @@ def _open_api_key_page(cluster_url: str) -> None:
     webbrowser.open(url)
 
 
-def _save_credentials_to_file(credentials_file_path: str, cluster_url: str, api_key: str) -> None:
-    """Read credentials file (if exists), add or update cluster_url -> api_key, write back."""
-    path = Path(credentials_file_path)
+def _save_credentials_to_file(api_keys_path: str | Path, cluster_url: str, api_key: str) -> None:
+    """Read API keys file (if exists), add or update cluster_url -> api_key, write back."""
+    path = Path(api_keys_path)
     if path.exists():
         data = json.loads(path.read_text())
         if not isinstance(data, dict):
@@ -84,64 +84,75 @@ def process_cluster(
     old_metrics: list[str],
     get_credentials_fn: Callable[[str], dict[str, Any]],
     export_fn: Callable[[str, dict[str, Any]], Any],
-    cache_dir: str | None,
-    use_browser: bool,
-    credentials_map: dict[str, str] | None,
-    credentials_file_path: str | None,
+    api_keys_path: str | Path,
+    credentials_map: dict[str, str],
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     """
     Export saved objects from one cluster, scan for old metrics, return (cluster_entry, errors).
     Returns None for cluster_entry on failure; errors list has one entry per failure.
-    On 401 after retry, may open API key page and prompt for pasted key; if provided and export
-    succeeds, key is saved to credentials_file_path and credentials_map is updated.
+    On 401 or missing API key, may open API key page and prompt for pasted key; if provided and
+    export succeeds, key is saved to api_keys_path and credentials_map is updated.
     """
     errors = []
+
+    def _prompt_and_save_then_retry_export(retry_exception: Exception):
+        if not sys.stdin.isatty():
+            print(
+                "Re-run in an interactive terminal to paste an API key.",
+                file=sys.stderr,
+            )
+            return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_exception)}]
+        _open_api_key_page(cluster_url)
+        print(
+            "Create an API key in the opened browser, then paste it here (or press Enter to skip this cluster):",
+            file=sys.stderr,
+        )
+        pasted = getpass.getpass("API key: ").strip()
+        if not pasted:
+            return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_exception)}]
+        creds = auth.get_credentials_from_api_key(pasted)
+        try:
+            objects = export_fn(cluster_url, creds)
+            entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
+            url = core.normalize_kibana_url(cluster_url)
+            credentials_map[url] = pasted
+            _save_credentials_to_file(api_keys_path, cluster_url, pasted)
+            return entry, []
+        except Exception as third_e:
+            return None, [{"cluster": cluster_url, "phase": "export", "error": str(third_e)}]
+
     try:
         creds = get_credentials_fn(cluster_url)
-    except Exception as e:
-        return None, [{"cluster": cluster_url, "phase": "auth", "error": str(e)}]
+    except RuntimeError as e:
+        if not sys.stdin.isatty():
+            print(
+                "Re-run in an interactive terminal to paste an API key.",
+                file=sys.stderr,
+            )
+            return None, [{"cluster": cluster_url, "phase": "auth", "error": str(e)}]
+        _open_api_key_page(cluster_url)
+        print(
+            "Create an API key in the opened browser, then paste it here (or press Enter to skip this cluster):",
+            file=sys.stderr,
+        )
+        pasted = getpass.getpass("API key: ").strip()
+        if not pasted:
+            return None, [{"cluster": cluster_url, "phase": "auth", "error": str(e)}]
+        url = core.normalize_kibana_url(cluster_url)
+        credentials_map[url] = pasted
+        _save_credentials_to_file(api_keys_path, cluster_url, pasted)
+        try:
+            creds = get_credentials_fn(cluster_url)
+        except Exception as retry_e:
+            return None, [{"cluster": cluster_url, "phase": "auth", "error": str(retry_e)}]
 
     try:
         objects = export_fn(cluster_url, creds)
         entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
         return entry, []
     except requests.HTTPError as e:
-        if e.response is not None and e.response.status_code == 401 and cache_dir and use_browser:
-            auth.invalidate_cached_credentials(cache_dir, cluster_url)
-            try:
-                creds = auth.get_credentials(
-                    cluster_url, credentials_map, cache_dir, use_browser=True
-                )
-                objects = export_fn(cluster_url, creds)
-                entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
-                return entry, []
-            except Exception as retry_e:
-                if not sys.stdin.isatty():
-                    print(
-                        "Re-run in an interactive terminal to paste an API key, or add one to --credentials.",
-                        file=sys.stderr,
-                    )
-                    return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_e)}]
-                _open_api_key_page(cluster_url)
-                print(
-                    "Create an API key in the opened browser, then paste it here (or press Enter to skip this cluster):",
-                    file=sys.stderr,
-                )
-                pasted = getpass.getpass("API key: ").strip()
-                if not pasted:
-                    return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_e)}]
-                creds = auth.get_credentials_from_api_key(pasted)
-                try:
-                    objects = export_fn(cluster_url, creds)
-                    entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
-                    url = core.normalize_kibana_url(cluster_url)
-                    if credentials_map is not None:
-                        credentials_map[url] = pasted
-                    if credentials_file_path:
-                        _save_credentials_to_file(credentials_file_path, cluster_url, pasted)
-                    return entry, []
-                except Exception as third_e:
-                    return None, [{"cluster": cluster_url, "phase": "export", "error": str(third_e)}]
+        if e.response is not None and e.response.status_code == 401:
+            return _prompt_and_save_then_retry_export(e)
         return None, [{"cluster": cluster_url, "phase": "export", "error": str(e)}]
     except Exception as e:
         return None, [{"cluster": cluster_url, "phase": "export", "error": str(e)}]
@@ -151,22 +162,18 @@ def run(
     clusters: list[str],
     metrics_config: list[dict[str, str]],
     output_dir: str,
-    credentials_map: dict[str, str] | None,
-    credentials_file_path: str,
-    cache_dir: str,
-    use_browser: bool,
+    credentials_map: dict[str, str],
+    api_keys_path: str | Path,
     max_consecutive_failures: int = 5,
 ) -> int:
     """
     Process each cluster, write report and errors JSON. Returns 0 on success, non-zero if
     we hit max_consecutive_failures or could not write outputs.
     """
-    if credentials_map is None:
-        credentials_map = {}
     old_metrics = core.get_old_metric_names(metrics_config)
 
     def get_creds(url: str) -> dict[str, Any]:
-        return auth.get_credentials(url, credentials_map, cache_dir, use_browser)
+        return auth.get_credentials(url, credentials_map)
 
     def export(url: str, creds: dict[str, Any]):
         return kibana_client.export_saved_objects(url, creds)
@@ -184,10 +191,8 @@ def run(
             old_metrics,
             get_creds,
             export,
-            cache_dir,
-            use_browser,
+            api_keys_path,
             credentials_map,
-            credentials_file_path,
         )
         results.append(result)
         entry, errs = result
@@ -212,6 +217,9 @@ def run(
 
 
 def main() -> int:
+    script_dir = Path(__file__).resolve().parent
+    api_keys_path = script_dir / "api-keys.json"
+
     parser = argparse.ArgumentParser(
         description="Report Kibana saved objects that reference legacy metric names (read-only)."
     )
@@ -230,20 +238,6 @@ def main() -> int:
         default="./out",
         help="Directory for report and errors JSON (default: ./out)",
     )
-    parser.add_argument(
-        "--credentials",
-        help="Optional JSON file mapping Kibana URL -> API key to skip browser auth",
-    )
-    parser.add_argument(
-        "--cache-dir",
-        default=".cache",
-        help="Directory for credential cache (default: .cache)",
-    )
-    parser.add_argument(
-        "--no-browser",
-        action="store_true",
-        help="Do not open browser for Okta; use only --credentials and cache (fail if missing)",
-    )
     args = parser.parse_args()
 
     try:
@@ -253,27 +247,20 @@ def main() -> int:
         print(f"Error loading config: {e}", file=sys.stderr)
         return 1
 
-    credentials_map = None
-    if args.credentials:
+    credentials_map = {}
+    if api_keys_path.exists():
         try:
-            credentials_map = load_credentials_map(args.credentials)
+            credentials_map = load_credentials_map(str(api_keys_path))
         except Exception as e:
-            print(f"Error loading credentials file: {e}", file=sys.stderr)
+            print(f"Error loading API keys file: {e}", file=sys.stderr)
             return 1
-
-    credentials_file_path = args.credentials
-    if not credentials_file_path:
-        script_dir = Path(__file__).resolve().parent
-        credentials_file_path = str(script_dir / "credentials.json")
 
     return run(
         clusters=clusters,
         metrics_config=metrics_config,
         output_dir=args.output_dir,
         credentials_map=credentials_map,
-        credentials_file_path=credentials_file_path,
-        cache_dir=args.cache_dir,
-        use_browser=not args.no_browser,
+        api_keys_path=api_keys_path,
     )
 
 

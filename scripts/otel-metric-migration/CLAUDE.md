@@ -20,15 +20,30 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 |--------|------|----------------|------------------------|
 | **core** | Scan saved objects for metric names; build report structure; normalize URLs; parse metrics config. | Yes – all of it. | None. |
 | **report_builder** | Parse cluster list and credentials file content; turn a stream of saved objects into one cluster entry; apply “stop after N consecutive failures” over results. | Yes – all of it. | None. |
-| **auth** | Resolve credentials: API key map → cache (file) → browser (Playwright). Build credential dicts; validate cache payload and TTL; cluster slug for cache filenames. | `cluster_slug`, `parse_and_validate_cached_credentials`, `get_credentials_from_api_key`, `get_credentials_from_cookies`. | `load_cached_credentials`, `save_cached_credentials`, `invalidate_cached_credentials`, `_get_credentials_via_browser`, `get_credentials`. |
+| **auth** | Resolve credentials from API key map only. Build credential dicts; cluster slug (for tests). | `cluster_slug`, `get_credentials_from_api_key`, `get_credentials`. | None. |
 | **kibana_client** | POST Kibana saved-objects export, stream NDJSON, yield parsed objects. | None. | HTTP only. |
 | **report_metric_references** | CLI, load config files, loop over clusters, call auth and export, collect results, write report and errors JSON. | None. | File read/write; delegates to auth and kibana_client. |
 
 ## Flow
 
-1. Load cluster URLs and metrics config (report_builder + core); optionally load credentials map (report_builder).
-2. For each cluster: get credentials (auth: map → cache → browser); export saved objects (kibana_client); scan each object for old metric names (core); build cluster entry (report_builder.objects_to_cluster_entry).
-3. Apply stop policy on results (report_builder.apply_stop_policy); build full report (core); write report and errors JSON.
+**Startup**
+
+- Load the cluster list and metrics config from the files given on the CLI (report_builder, core).
+- Load API keys from `api-keys.json` in this directory if the file exists (report_builder). If it doesn’t exist or is empty, the script will prompt for keys when needed.
+
+**Per cluster**
+
+For each cluster URL:
+
+1. Get an API key for that cluster from the in-memory map (auth). If none is found, the script can open the API key page and prompt the user to paste one, then save it to `api-keys.json` and retry.
+2. Export all saved objects from the cluster (kibana_client).
+3. Scan each object for references to the legacy metric names (core).
+4. Build one “cluster entry” for the report: cluster URL plus the list of objects that reference those metrics (report_builder.objects_to_cluster_entry).
+
+**Finish**
+
+- Decide whether we hit the “stop after N consecutive failures” limit (report_builder.apply_stop_policy).
+- Build the full report structure and write `metric_references_report.json` and, if there were failures, `metric_report_errors.json` (core, report_metric_references).
 
 ## Running and testing
 
@@ -38,7 +53,7 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 ## Conventions
 
 - **Flat layout:** No Python package (no `otel_migration/`). Script and helpers are siblings; run and test from this directory.
-- **Public API:** Functions that are part of the supported, testable API have no leading underscore (e.g. `cluster_slug`, `parse_and_validate_cached_credentials`). Leading underscore = internal to the module.
+- **Public API:** Functions that are part of the supported, testable API have no leading underscore (e.g. `cluster_slug`, `get_credentials_from_api_key`). Leading underscore = internal to the module.
 - **ES URL:** For future phases, Elasticsearch URL is derived from Kibana URL by replacing `.kb.` with `.es.` in the host (see `core.derive_es_url`).
 
 ## Phase 2 (future)

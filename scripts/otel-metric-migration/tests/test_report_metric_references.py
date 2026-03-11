@@ -21,7 +21,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-import pytest
 import requests
 
 import report_metric_references
@@ -66,7 +65,7 @@ def test_open_api_key_page_builds_correct_url_and_opens_browser():
 def test_save_credentials_to_file_creates_file_when_missing(tmp_path):
     cred_path = tmp_path / "creds.json"
     report_metric_references._save_credentials_to_file(
-        str(cred_path), "https://foo.com", "my-api-key"
+        cred_path, "https://foo.com", "my-api-key"
     )
     data = json.loads(cred_path.read_text())
     assert data == {"https://foo.com": "my-api-key"}
@@ -76,7 +75,7 @@ def test_save_credentials_to_file_appends_to_existing(tmp_path):
     cred_path = tmp_path / "creds.json"
     cred_path.write_text(json.dumps({"https://a.com": "key-a"}))
     report_metric_references._save_credentials_to_file(
-        str(cred_path), "https://b.com", "key-b"
+        cred_path, "https://b.com", "key-b"
     )
     data = json.loads(cred_path.read_text())
     assert data == {"https://a.com": "key-a", "https://b.com": "key-b"}
@@ -86,7 +85,7 @@ def test_save_credentials_to_file_updates_existing_url(tmp_path):
     cred_path = tmp_path / "creds.json"
     cred_path.write_text(json.dumps({"https://foo.com": "old-key"}))
     report_metric_references._save_credentials_to_file(
-        str(cred_path), "https://foo.com", "new-key"
+        cred_path, "https://foo.com", "new-key"
     )
     data = json.loads(cred_path.read_text())
     assert data == {"https://foo.com": "new-key"}
@@ -95,9 +94,10 @@ def test_save_credentials_to_file_updates_existing_url(tmp_path):
 # ---- process_cluster: 401 + paste key flow ----
 
 
-def test_process_cluster_401_retry_fails_user_pastes_key_second_export_succeeds():
+def test_process_cluster_401_user_pastes_key_second_export_succeeds(tmp_path):
     cluster_url = "https://foo.kb.example.com"
     old_metrics = ["system.cpu.usage"]
+    api_keys_path = tmp_path / "api-keys.json"
     get_credentials_fn = MagicMock(return_value={"headers": {"Authorization": "ApiKey x"}})
     export_calls = []
 
@@ -111,20 +111,14 @@ def test_process_cluster_401_retry_fails_user_pastes_key_second_export_succeeds(
 
     with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
         "report_metric_references.getpass.getpass", return_value="pasted-key-123"
-    ), patch("report_metric_references.webbrowser.open"), patch(
-        "report_metric_references.auth.invalidate_cached_credentials"
-    ), patch(
-        "report_metric_references.auth.get_credentials", side_effect=requests.HTTPError("401")
-    ):
+    ), patch("report_metric_references.webbrowser.open"):
         entry, errs = report_metric_references.process_cluster(
             cluster_url,
             old_metrics,
             get_credentials_fn,
             export_fn,
-            cache_dir=".cache",
-            use_browser=True,
+            api_keys_path=api_keys_path,
             credentials_map=credentials_map,
-            credentials_file_path=None,
         )
 
     assert len(export_calls) == 2
@@ -134,8 +128,9 @@ def test_process_cluster_401_retry_fails_user_pastes_key_second_export_succeeds(
     assert credentials_map.get("https://foo.kb.example.com") == "pasted-key-123"
 
 
-def test_process_cluster_401_retry_fails_user_skips_empty_key():
+def test_process_cluster_401_user_skips_empty_key(tmp_path):
     cluster_url = "https://foo.kb.example.com"
+    api_keys_path = tmp_path / "api-keys.json"
     get_credentials_fn = MagicMock(return_value={"headers": {}})
 
     def export_fn(*args, **kwargs):
@@ -143,20 +138,14 @@ def test_process_cluster_401_retry_fails_user_skips_empty_key():
 
     with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
         "report_metric_references.getpass.getpass", return_value=""
-    ), patch("report_metric_references.webbrowser.open"), patch(
-        "report_metric_references.auth.invalidate_cached_credentials"
-    ), patch(
-        "report_metric_references.auth.get_credentials", side_effect=requests.HTTPError("401")
-    ):
+    ), patch("report_metric_references.webbrowser.open"):
         entry, errs = report_metric_references.process_cluster(
             cluster_url,
             ["m1"],
             get_credentials_fn,
             export_fn,
-            cache_dir=".cache",
-            use_browser=True,
+            api_keys_path=api_keys_path,
             credentials_map={},
-            credentials_file_path=None,
         )
 
     assert entry is None
@@ -165,8 +154,9 @@ def test_process_cluster_401_retry_fails_user_skips_empty_key():
     assert errs[0]["phase"] == "export"
 
 
-def test_process_cluster_401_retry_fails_user_pastes_key_third_export_still_fails():
+def test_process_cluster_401_user_pastes_key_third_export_still_fails(tmp_path):
     cluster_url = "https://foo.kb.example.com"
+    api_keys_path = tmp_path / "api-keys.json"
     get_credentials_fn = MagicMock(return_value={"headers": {}})
 
     def export_fn(*args, **kwargs):
@@ -175,20 +165,14 @@ def test_process_cluster_401_retry_fails_user_pastes_key_third_export_still_fail
     credentials_map = {}
     with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
         "report_metric_references.getpass.getpass", return_value="bad-key"
-    ), patch("report_metric_references.webbrowser.open"), patch(
-        "report_metric_references.auth.invalidate_cached_credentials"
-    ), patch(
-        "report_metric_references.auth.get_credentials", side_effect=requests.HTTPError("401")
-    ):
+    ), patch("report_metric_references.webbrowser.open"):
         entry, errs = report_metric_references.process_cluster(
             cluster_url,
             ["m1"],
             get_credentials_fn,
             export_fn,
-            cache_dir=".cache",
-            use_browser=True,
+            api_keys_path=api_keys_path,
             credentials_map=credentials_map,
-            credentials_file_path=None,
         )
 
     assert entry is None
@@ -197,8 +181,9 @@ def test_process_cluster_401_retry_fails_user_pastes_key_third_export_still_fail
     assert credentials_map == {}
 
 
-def test_process_cluster_401_retry_fails_not_tty_skips_prompt():
+def test_process_cluster_401_not_tty_skips_prompt(tmp_path):
     cluster_url = "https://foo.kb.example.com"
+    api_keys_path = tmp_path / "api-keys.json"
     get_credentials_fn = MagicMock(return_value={"headers": {}})
 
     def export_fn(*args, **kwargs):
@@ -208,20 +193,14 @@ def test_process_cluster_401_retry_fails_not_tty_skips_prompt():
         "report_metric_references.getpass.getpass"
     ) as mock_getpass, patch(
         "report_metric_references.webbrowser.open"
-    ) as mock_open, patch(
-        "report_metric_references.auth.invalidate_cached_credentials"
-    ), patch(
-        "report_metric_references.auth.get_credentials", side_effect=requests.HTTPError("401")
-    ):
+    ) as mock_open:
         entry, errs = report_metric_references.process_cluster(
             cluster_url,
             ["m1"],
             get_credentials_fn,
             export_fn,
-            cache_dir=".cache",
-            use_browser=True,
+            api_keys_path=api_keys_path,
             credentials_map={},
-            credentials_file_path=None,
         )
 
     mock_getpass.assert_not_called()
@@ -230,9 +209,9 @@ def test_process_cluster_401_retry_fails_not_tty_skips_prompt():
     assert len(errs) == 1
 
 
-def test_process_cluster_401_pasted_key_success_writes_credentials_file(tmp_path):
+def test_process_cluster_401_pasted_key_success_writes_api_keys_file(tmp_path):
     cluster_url = "https://foo.kb.example.com"
-    cred_file = tmp_path / "credentials.json"
+    api_keys_path = tmp_path / "api-keys.json"
     get_credentials_fn = MagicMock(return_value={"headers": {}})
     export_calls = []
 
@@ -245,65 +224,26 @@ def test_process_cluster_401_pasted_key_success_writes_credentials_file(tmp_path
     credentials_map = {}
     with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
         "report_metric_references.getpass.getpass", return_value="saved-key-456"
-    ), patch("report_metric_references.webbrowser.open"), patch(
-        "report_metric_references.auth.invalidate_cached_credentials"
-    ), patch(
-        "report_metric_references.auth.get_credentials", side_effect=requests.HTTPError("401")
-    ):
+    ), patch("report_metric_references.webbrowser.open"):
         entry, errs = report_metric_references.process_cluster(
             cluster_url,
             ["m1"],
             get_credentials_fn,
             export_fn,
-            cache_dir=".cache",
-            use_browser=True,
+            api_keys_path=api_keys_path,
             credentials_map=credentials_map,
-            credentials_file_path=str(cred_file),
         )
 
     assert entry is not None
     assert errs == []
-    assert cred_file.exists()
-    data = json.loads(cred_file.read_text())
+    assert api_keys_path.exists()
+    data = json.loads(api_keys_path.read_text())
     assert data == {"https://foo.kb.example.com": "saved-key-456"}
 
 
-def test_process_cluster_401_pasted_key_success_credentials_map_was_none_mutates():
+def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_entry(tmp_path):
     cluster_url = "https://foo.kb.example.com"
-    get_credentials_fn = MagicMock(return_value={"headers": {}})
-    export_calls = []
-
-    def export_fn(url, creds):
-        export_calls.append(1)
-        if len(export_calls) == 1:
-            raise _make_401_error()
-        return _sample_export_objects()
-
-    credentials_map = None
-    with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
-        "report_metric_references.getpass.getpass", return_value="new-key"
-    ), patch("report_metric_references.webbrowser.open"), patch(
-        "report_metric_references.auth.invalidate_cached_credentials"
-    ), patch(
-        "report_metric_references.auth.get_credentials", side_effect=requests.HTTPError("401")
-    ):
-        entry, errs = report_metric_references.process_cluster(
-            cluster_url,
-            ["m1"],
-            get_credentials_fn,
-            export_fn,
-            cache_dir=".cache",
-            use_browser=True,
-            credentials_map=credentials_map,
-            credentials_file_path=None,
-        )
-
-    assert entry is not None
-    assert credentials_map is None
-
-
-def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_entry():
-    cluster_url = "https://foo.kb.example.com"
+    api_keys_path = tmp_path / "api-keys.json"
     get_credentials_fn = MagicMock(return_value={"headers": {}})
     export_calls = []
 
@@ -316,20 +256,14 @@ def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_en
     credentials_map = {"https://other.com": "other-key"}
     with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
         "report_metric_references.getpass.getpass", return_value="pasted-key"
-    ), patch("report_metric_references.webbrowser.open"), patch(
-        "report_metric_references.auth.invalidate_cached_credentials"
-    ), patch(
-        "report_metric_references.auth.get_credentials", side_effect=requests.HTTPError("401")
-    ):
+    ), patch("report_metric_references.webbrowser.open"):
         entry, errs = report_metric_references.process_cluster(
             cluster_url,
             ["m1"],
             get_credentials_fn,
             export_fn,
-            cache_dir=".cache",
-            use_browser=True,
+            api_keys_path=api_keys_path,
             credentials_map=credentials_map,
-            credentials_file_path=None,
         )
 
     assert entry is not None

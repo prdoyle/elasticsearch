@@ -7,14 +7,28 @@ This script produces a **read-only report** of Kibana saved objects that referen
 - **Cluster list:** A file with one Kibana base URL per line (e.g. `https://platform-metrics.kb.af-south-1.aws.elastic-cloud.com`). See `clusters.txt.example`.
 - **Metrics config:** A JSON file with an array of `{"old": "<metric_name>", "new": "<metric_name>"}`. The script searches for the `old` names. See `metrics_config.json.example`.
 
+## Setup (Python virtual environment)
+
+The script uses a **virtual environment** (venv) so its dependencies are isolated from the rest of your system. From this directory (`scripts/otel-metric-migration/`):
+
+1. **Create the venv** (only needed once, or if `.venv` doesn't exist):
+   ```bash
+   python3 -m venv .venv
+   ```
+
+2. **Activate the venv** so that `python` and `pip` in this terminal use the environment inside `.venv`. You must do this in every new terminal before running the script or tests:
+   ```bash
+   source .venv/bin/activate
+   ```
+   Your prompt may show `(.venv)` to indicate the venv is active.
+
 ## Running the script
 
-From this directory (`scripts/otel-metric-migration/`):
+From this directory, with the venv activated (see Setup above):
 
 ```bash
+source .venv/bin/activate   # do this first in each new terminal
 pip install -r requirements.txt
-# If using browser auth, install Playwright browser:
-# playwright install chromium
 
 python report_metric_references.py \
   --clusters clusters.txt \
@@ -24,15 +38,11 @@ python report_metric_references.py \
 
 Options:
 
-- `--credentials credentials.json` – Optional. JSON object mapping Kibana URL to API key. If provided for a cluster, the script uses the API key and skips browser auth for that cluster.
-- `--cache-dir .cache` – Directory for credential cache (default: `.cache`). Cached sessions are reused for 45 minutes.
-- `--no-browser` – Do not open a browser. Use only credentials from `--credentials` and cache; the script will fail if no valid credential is available for a cluster.
+- `--output-dir ./out` – Directory for report and errors JSON (default: `./out`).
 
 ## Authentication
 
-- **API key:** Create an API key in Kibana (after logging in with Okta), then add the cluster URL and key to a JSON file and pass it with `--credentials`. This avoids opening a browser per cluster.
-- **Browser (Okta):** If you do not provide an API key for a cluster, the script opens a browser to the Kibana URL. Log in via Okta; the script then captures the session and uses it for the export request. The session is cached for 45 minutes.
-- If a request returns 401, the script invalidates the cache for that cluster and (if not `--no-browser`) retries once with browser login. If that still fails, the script opens the Kibana API key management page in your browser and prompts you to paste a newly created API key (input is not echoed). If you paste a key and the export succeeds, the key is always saved to the credentials file (`--credentials` if set, otherwise `credentials.json` in this directory, which is gitignored) so future runs use it without prompting.
+- **API keys:** The script uses API keys only. Keys are stored in `api-keys.json` in this directory (gitignored). When the script needs an API key for a cluster and none is found, or when a request returns 401, it opens the Kibana API key management page in your browser and prompts you to paste a newly created API key (input is not echoed). If you paste a key and the export succeeds, the key is saved to `api-keys.json` so future runs use it without prompting.
 
 ## Output
 
@@ -47,11 +57,12 @@ For future phases (runtime fields, etc.), the Elasticsearch URL is derived from 
 
 ## Running tests
 
-From this directory:
+From this directory, with the venv activated (see Setup above):
 
 ```bash
+source .venv/bin/activate   # do this first in each new terminal
 pip install -r requirements-dev.txt
-pytest tests/ -v
+python -m pytest tests/ -v
 ```
 
 Tests cover the core scanning and report-building logic only (no HTTP or browser).
