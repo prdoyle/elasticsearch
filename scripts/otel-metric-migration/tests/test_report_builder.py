@@ -137,6 +137,7 @@ def test_objects_to_cluster_entry_one_object_with_ref():
     assert entry["saved_objects"][0]["type"] == "dashboard"
     assert entry["saved_objects"][0]["id"] == "d1"
     assert entry["saved_objects"][0]["title"] == "CPU"
+    assert entry["saved_objects"][0]["view_url"] == "https://a.com/app/dashboards#/view/d1"
     assert entry["saved_objects"][0]["metric_references"][0]["old_metric"] == "system.cpu.usage"
 
 
@@ -154,6 +155,7 @@ def test_objects_to_cluster_entry_two_objects_one_with_refs():
     )
     assert len(entry["saved_objects"]) == 1
     assert entry["saved_objects"][0]["type"] == "visualization"
+    assert entry["saved_objects"][0]["view_url"] == "https://a.com/app/visualize#/edit/v1"
     assert entry["saved_objects"][0]["metric_references"][0]["old_metric"] == "system.memory.usage"
 
 

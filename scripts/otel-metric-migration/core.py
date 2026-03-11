@@ -51,6 +51,28 @@ def derive_es_url(kibana_url: str) -> str:
     return kibana_url.replace(".kb.", ".es.")
 
 
+# Kibana app paths for opening a saved object in the UI. {id} is replaced with the object id.
+# Unknown types fall back to the saved objects management page.
+_SAVED_OBJECT_VIEW_PATHS: dict[str, str] = {
+    "dashboard": "/app/dashboards#/view/{id}",
+    "visualization": "/app/visualize#/edit/{id}",
+    "lens": "/app/lens#/edit/{id}",
+}
+_FALLBACK_VIEW_PATH = "/app/management/kibana/objects"
+
+
+def saved_object_view_url(cluster_url: str, object_type: str, object_id: str) -> str:
+    """
+    Return a Kibana URL that opens the given saved object in the UI.
+    Uses app-specific paths for dashboard, visualization, lens; unknown types
+    use the saved objects management page.
+    """
+    base = normalize_kibana_url(cluster_url).rstrip("/")
+    path_template = _SAVED_OBJECT_VIEW_PATHS.get(object_type, _FALLBACK_VIEW_PATH)
+    path = path_template.format(id=object_id) if object_id else _FALLBACK_VIEW_PATH
+    return base + path
+
+
 def _find_metrics_in_string(value: str, old_metrics: list[str]) -> list[tuple[str, str]]:
     """
     If value is a string, check for exact or substring matches of old_metrics.

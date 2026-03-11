@@ -32,6 +32,31 @@ def test_derive_es_url():
     assert core.derive_es_url("https://platform-metrics.kb.af-south-1.aws.elastic-cloud.com") == "https://platform-metrics.es.af-south-1.aws.elastic-cloud.com"
 
 
+def test_saved_object_view_url_dashboard():
+    url = core.saved_object_view_url("https://foo.kb.example.com", "dashboard", "dash-123")
+    assert url == "https://foo.kb.example.com/app/dashboards#/view/dash-123"
+
+
+def test_saved_object_view_url_visualization():
+    url = core.saved_object_view_url("https://host.com", "visualization", "vis-456")
+    assert url == "https://host.com/app/visualize#/edit/vis-456"
+
+
+def test_saved_object_view_url_lens():
+    url = core.saved_object_view_url("https://host.com/", "lens", "len-789")
+    assert url == "https://host.com/app/lens#/edit/len-789"
+
+
+def test_saved_object_view_url_unknown_type_uses_fallback():
+    url = core.saved_object_view_url("https://host.com", "search", "s1")
+    assert url == "https://host.com/app/management/kibana/objects"
+
+
+def test_saved_object_view_url_empty_id_uses_fallback():
+    url = core.saved_object_view_url("https://host.com", "dashboard", "")
+    assert url == "https://host.com/app/management/kibana/objects"
+
+
 def test_scan_saved_object_empty_metrics():
     obj = {"type": "dashboard", "id": "x", "attributes": {"title": "CPU", "visState": '{"aggs":[{"field":"system.cpu.usage"}]}'}}
     assert core.scan_saved_object(obj, []) == []

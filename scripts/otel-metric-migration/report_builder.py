@@ -77,11 +77,14 @@ def objects_to_cluster_entry(
     for obj in objects:
         refs = core.scan_saved_object(obj, old_metrics)
         if refs:
+            obj_type = obj.get("type", "")
+            obj_id = obj.get("id", "")
             objects_with_refs.append({
-                "type": obj.get("type", ""),
-                "id": obj.get("id", ""),
+                "type": obj_type,
+                "id": obj_id,
                 "title": core.get_title_from_object(obj),
                 "metric_references": refs,
+                "view_url": core.saved_object_view_url(cluster_url, obj_type, obj_id),
             })
     return core.build_cluster_entry(cluster_url, objects_with_refs)
 

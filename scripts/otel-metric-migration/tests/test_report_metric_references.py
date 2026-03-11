@@ -15,11 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Unit tests for report_metric_references: process_cluster 401 recovery, _api_key_page_url, _save_credentials_to_file."""
+"""Unit tests for report_metric_references: process_cluster 401 recovery, _api_key_page_url, _save_credentials_to_file, run() symlink."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import requests
 
@@ -249,3 +250,35 @@ def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_en
     assert entry is not None
     assert credentials_map["https://other.com"] == "other-key"
     assert credentials_map["https://foo.kb.example.com"] == "pasted-key"
+
+
+def test_run_creates_latest_symlink(tmp_path):
+    """run() creates output_dir/latest symlink pointing to the timestamped run directory."""
+    try:
+        (tmp_path / "dummy").write_text("")
+        (tmp_path / "latest").symlink_to("dummy")
+        (tmp_path / "latest").unlink()
+    except OSError:
+        import pytest
+        pytest.skip("Symlinks not supported in this environment")
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    fixed_ts = "20250101T120000Z"
+    one_entry = {"cluster": "https://x.com", "saved_objects": []}
+    with patch("report_metric_references.process_cluster", return_value=(one_entry, [])):
+        with patch("report_metric_references.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            report_metric_references.run(
+                clusters=["https://x.com"],
+                metrics_config=[{"old": "m1", "new": "m2"}],
+                output_dir=str(output_dir),
+                credentials_map={},
+                api_keys_path=tmp_path / "api-keys.json",
+            )
+    run_dir = output_dir / fixed_ts
+    assert run_dir.exists()
+    assert (run_dir / "metric_references_report.json").exists()
+    latest = output_dir / "latest"
+    assert latest.is_symlink()
+    assert latest.resolve() == run_dir.resolve()
+    assert (latest / "metric_references_report.json").exists()

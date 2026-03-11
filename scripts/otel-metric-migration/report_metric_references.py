@@ -211,6 +211,22 @@ def run(
 
     if all_errors:
         errors_path.write_text(json.dumps(all_errors, indent=2))
+
+    latest_link = Path(output_dir) / "latest"
+    if latest_link.exists():
+        if latest_link.is_symlink():
+            latest_link.unlink()
+        else:
+            print(
+                "Output directory contains non-symlink 'latest'; skipping symlink creation.",
+                file=sys.stderr,
+            )
+    if not latest_link.exists():
+        try:
+            latest_link.symlink_to(run_dir.name)
+        except OSError as e:
+            print(f"Could not create 'latest' symlink: {e}", file=sys.stderr)
+
     return 1 if stopped_early else 0
 
 
