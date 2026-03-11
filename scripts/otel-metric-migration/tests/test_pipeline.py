@@ -93,17 +93,17 @@ def test_resolve_preset_filename_rejects_path_separator_and_dotdot():
 
 
 def test_step_output_dir_default_base():
-    """Step output dir is script_dir / base / step_name with default base 'out'."""
-    assert pipeline.step_output_dir(Path("/script"), "out", "qa_report") == Path(
-        "/script/out/qa_report"
-    )
+    """Step output dir is script_dir / base / run_timestamp / step_name."""
+    assert pipeline.step_output_dir(
+        Path("/script"), "out", "20250101T120000Z", "qa_report"
+    ) == Path("/script/out/20250101T120000Z/qa_report")
 
 
 def test_step_output_dir_custom_base():
     """Step output dir with custom base (e.g. from config output_dir)."""
     assert pipeline.step_output_dir(
-        Path("/script"), "reports", "prod_report"
-    ) == Path("/script/reports/prod_report")
+        Path("/script"), "reports", "20250101T120000Z", "prod_report"
+    ) == Path("/script/reports/20250101T120000Z/prod_report")
 
 
 # ---- parse_pipeline: valid cases ----

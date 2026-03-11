@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -33,14 +34,20 @@ import report_metric_references
 
 
 def _report_handler(
-    config: dict[str, object], script_dir: Path, step_name: str
+    config: dict[str, object],
+    script_dir: Path,
+    step_name: str,
+    run_timestamp: str,
 ) -> int:
     """Run the report verb: load clusters/metrics, credentials, call run()."""
     pipeline.validate_report_config(config)
     clusters_path = script_dir / str(config["clusters"])
     metrics_path = script_dir / str(config["metrics"])
     base = str(config.get("output_dir", "out"))
-    output_dir = pipeline.step_output_dir(script_dir, base, step_name)
+    output_dir_base = script_dir / base
+    run_dir = pipeline.step_output_dir(
+        script_dir, base, run_timestamp, step_name
+    )
     api_keys_path = script_dir / "api-keys.json"
 
     try:
@@ -63,9 +70,11 @@ def _report_handler(
     return report_metric_references.run(
         clusters=clusters,
         metrics_config=metrics_config,
-        output_dir=str(output_dir),
+        output_dir=str(output_dir_base),
         credentials_map=credentials_map,
         api_keys_path=api_keys_path,
+        run_dir=str(run_dir),
+        run_timestamp=run_timestamp,
     )
 
 
@@ -109,13 +118,14 @@ def main() -> int:
         print(f"Invalid pipeline: {e}", file=sys.stderr)
         return 1
 
+    run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     for step_name, verb, config in steps:
         if verb not in VERB_REGISTRY:
             print(f"Unknown verb: {verb}", file=sys.stderr)
             return 1
         handler = VERB_REGISTRY[verb]
         assert callable(handler)
-        code = handler(config, script_dir, step_name)
+        code = handler(config, script_dir, step_name, run_timestamp)
         if code != 0:
             return code
     return 0

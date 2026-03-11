@@ -59,12 +59,14 @@ def resolve_preset_filename(preset_file: str) -> str:
     return preset_file
 
 
-def step_output_dir(script_dir: Path, base: str, step_name: str) -> Path:
+def step_output_dir(
+    script_dir: Path, base: str, run_timestamp: str, step_name: str
+) -> Path:
     """
-    Return the path used for a step's output directory: script_dir / base / step_name.
+    Return the path used for a step's output directory: script_dir / base / run_timestamp / step_name.
     No I/O; pure path construction for testability.
     """
-    return script_dir / base / step_name
+    return script_dir / base / run_timestamp / step_name
 
 
 def parse_pipeline(yaml_data: Any) -> list[tuple[str, str, dict[str, Any]]]:

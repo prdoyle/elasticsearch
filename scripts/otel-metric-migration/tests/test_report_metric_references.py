@@ -18,7 +18,6 @@
 """Unit tests for report_metric_references: process_cluster 401 recovery, _api_key_page_url, _save_credentials_to_file, run() symlink."""
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -260,7 +259,7 @@ def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_en
 
 
 def test_run_creates_latest_symlink(tmp_path):
-    """run() creates output_dir/latest symlink pointing to the timestamped run directory."""
+    """run() creates output_dir/latest symlink pointing to run_timestamp."""
     try:
         (tmp_path / "dummy").write_text("")
         (tmp_path / "latest").symlink_to("dummy")
@@ -271,21 +270,53 @@ def test_run_creates_latest_symlink(tmp_path):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
     fixed_ts = "20250101T120000Z"
+    run_dir = output_dir / fixed_ts / "report"
     one_entry = {"cluster": "https://x.com", "saved_objects": []}
     with patch("report_metric_references.process_cluster", return_value=(one_entry, [])):
-        with patch("report_metric_references.datetime") as mock_dt:
-            mock_dt.now.return_value = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-            report_metric_references.run(
-                clusters=["https://x.com"],
-                metrics_config=[{"old": "m1", "new": {"name": "m2", "dimensions": {}}}],
-                output_dir=str(output_dir),
-                credentials_map={},
-                api_keys_path=tmp_path / "api-keys.json",
-            )
-    run_dir = output_dir / fixed_ts
+        report_metric_references.run(
+            clusters=["https://x.com"],
+            metrics_config=[{"old": "m1", "new": {"name": "m2", "dimensions": {}}}],
+            output_dir=str(output_dir),
+            credentials_map={},
+            api_keys_path=tmp_path / "api-keys.json",
+            run_dir=str(run_dir),
+            run_timestamp=fixed_ts,
+        )
     assert run_dir.exists()
     assert (run_dir / "metric_references_report.json").exists()
     latest = output_dir / "latest"
     assert latest.is_symlink()
-    assert latest.resolve() == run_dir.resolve()
-    assert (latest / "metric_references_report.json").exists()
+    assert str(latest.readlink()) == fixed_ts
+    assert (output_dir / "latest" / "report" / "metric_references_report.json").exists()
+
+
+def test_run_with_run_dir_uses_timestamp_step_path(tmp_path):
+    """run() with run_dir and run_timestamp writes to run_dir and sets base/latest -> run_timestamp."""
+    try:
+        (tmp_path / "dummy").write_text("")
+        (tmp_path / "latest").symlink_to("dummy")
+        (tmp_path / "latest").unlink()
+    except OSError:
+        import pytest
+        pytest.skip("Symlinks not supported in this environment")
+    output_base = tmp_path / "out"
+    output_base.mkdir()
+    run_timestamp = "20250101T120000Z"
+    run_dir = output_base / run_timestamp / "qa_report"
+    one_entry = {"cluster": "https://x.com", "saved_objects": []}
+    with patch("report_metric_references.process_cluster", return_value=(one_entry, [])):
+        report_metric_references.run(
+            clusters=["https://x.com"],
+            metrics_config=[{"old": "m1", "new": {"name": "m2", "dimensions": {}}}],
+            output_dir=str(output_base),
+            credentials_map={},
+            api_keys_path=tmp_path / "api-keys.json",
+            run_dir=str(run_dir),
+            run_timestamp=run_timestamp,
+        )
+    assert run_dir.exists()
+    assert (run_dir / "metric_references_report.json").exists()
+    latest = output_base / "latest"
+    assert latest.is_symlink()
+    assert str(latest.readlink()) == run_timestamp
+    assert (output_base / "latest" / "qa_report" / "metric_references_report.json").exists()

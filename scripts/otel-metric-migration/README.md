@@ -30,15 +30,10 @@ From this directory, with the venv activated (see Setup above):
 source .venv/bin/activate   # do this first in each new terminal
 pip install -r requirements.txt
 
-python report_metric_references.py \
-  --clusters clusters.txt \
-  --metrics metrics_config.json \
-  --output-dir ./out
+./omm qa-report
 ```
 
-Options:
-
-- `--output-dir ./out` – Directory for report and errors JSON (default: `./out`).
+Use a YAML preset (e.g. `qa-report.yaml`) that defines steps; each step’s output goes under `./out/<timestamp>/<step_name>/`.
 
 ## Authentication
 
@@ -46,8 +41,9 @@ Options:
 
 ## Output
 
-- **Report:** `./out/<timestamp>/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
-- **Errors:** If any cluster failed, `./out/<timestamp>/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
+- **Report:** `./out/<timestamp>/<step_name>/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
+- **Errors:** If any cluster failed, `./out/<timestamp>/<step_name>/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
+- **Latest:** `./out/latest` is a symlink to the most recent `<timestamp>` directory.
 
 The script stops after 5 consecutive cluster failures and exits with code 1; the report still contains all successfully processed clusters.
 

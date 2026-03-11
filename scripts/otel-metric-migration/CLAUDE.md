@@ -7,7 +7,7 @@ This directory is **phase 1** of an OTel metric migration: a **read-only** repor
 ## Entry point
 
 - **`omm.py`** and the **`omm`** bash wrapper – Preferred way to run a pipeline from a YAML preset (e.g. `omm qa-report.yaml`). The wrapper runs `omm.py` in the venv and passes arguments through.
-- **`report_metric_references.py`** – Can still be run directly for the legacy CLI (`--clusters`, `--metrics`). All other `.py` files are helper libraries.
+- **`report_metric_references.py`** – Library: `run()` and loaders used by omm. All other `.py` files are helper libraries.
 
 ## Design: logic vs I/O and unit testing
 
@@ -26,7 +26,7 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 | **auth** | Resolve credentials from API key map only. Build credential dicts; cluster slug (for tests). | `cluster_slug`, `get_credentials_from_api_key`, `get_credentials`. | None. |
 | **kibana_client** | POST Kibana saved-objects export, stream NDJSON, yield parsed objects. | None. | HTTP only. |
 | **pipeline** | Parse preset YAML into (step_name, verb, config) steps; validate report config and step names; resolve preset filename; step_output_dir (path for step output). | Yes – all of it. | None. |
-| **report_metric_references** | CLI, load config files, loop over clusters, call auth and export, collect results, write report and errors JSON. | None. | File read/write; delegates to auth and kibana_client. |
+| **report_metric_references** | `run()` and loaders: loop over clusters, call auth and export, collect results, write report and errors JSON. | None. | File read/write; delegates to auth and kibana_client. |
 
 ## Flow
 
@@ -53,7 +53,7 @@ For each cluster URL:
 
 - **Agents must not run against real clusters to verify behavior.** Scripts issue HTTP requests to Kibana/Elasticsearch. Use `pytest tests/ -v` instead; manual runs are for operators hitting real clusters with appropriate config.
   - Humans: the responsibility is still yours. Agents gonna agent. Test without network, or without VPN, or against QA. Use your judgement.
-- **Run:** `omm <preset>.yaml` (e.g. `omm qa-report`) or `python report_metric_references.py --clusters ... --metrics ...` (see README).
+- **Run:** `omm <preset>.yaml` (e.g. `omm qa-report`) (see README).
 - **Tests:** `pytest tests/ -v`; in-memory only, conftest.py adds this directory to `sys.path`.
 
 ## Conventions

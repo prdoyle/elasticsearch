@@ -17,19 +17,18 @@
 # under the License.
 
 """
-CLI to report saved objects that reference legacy metric names across Kibana clusters.
+Report saved objects that reference legacy metric names across Kibana clusters.
 Read-only: exports saved objects and writes a JSON report. No modifications to clusters.
+Used by omm via run(). Loaders (load_cluster_list, load_metrics_config, load_credentials_map) are public.
 """
 
 from __future__ import annotations
 
-import argparse
 import getpass
 import io
 import json
 import sys
 import webbrowser
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -179,12 +178,18 @@ def run(
     output_dir: str,
     credentials_map: dict[str, str],
     api_keys_path: str | Path,
+    run_dir: str,
+    run_timestamp: str,
     collect_api_key_fn: Callable[[str], str] = _collect_api_key_via_browser,
     max_consecutive_failures: int = 5,
 ) -> int:
     """
     Process each cluster, write report and errors JSON. Returns 0 on success, non-zero if
     we hit max_consecutive_failures or could not write outputs.
+
+    output_dir is the base output directory (e.g. script_dir/out). run_dir is the
+    directory for this run (output_dir/run_timestamp/step_name). Sets output_dir/latest
+    -> run_timestamp.
     """
     old_metrics = core.get_old_metric_names(metrics_config)
 
@@ -194,10 +199,10 @@ def run(
     def export(url: str, creds: dict[str, Any]):
         return kibana_client.export_saved_objects(url, creds)
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = Path(output_dir) / timestamp
-    report_path = run_dir / "metric_references_report.json"
-    errors_path = run_dir / "metric_report_errors.json"
+    run_dir_path = Path(run_dir)
+    output_base = run_dir_path.parent.parent
+    report_path = run_dir_path / "metric_references_report.json"
+    errors_path = run_dir_path / "metric_report_errors.json"
 
     results = []
     consecutive_failures = 0
@@ -235,14 +240,14 @@ def run(
         results, max_consecutive_failures
     )
 
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir_path.mkdir(parents=True, exist_ok=True)
     report = core.build_full_report(cluster_entries, metrics_config)
     report_path.write_text(json.dumps(report, indent=2))
 
     if all_errors:
         errors_path.write_text(json.dumps(all_errors, indent=2))
 
-    latest_link = Path(output_dir) / "latest"
+    latest_link = output_base / "latest"
     if latest_link.exists():
         if latest_link.is_symlink():
             latest_link.unlink()
@@ -253,60 +258,8 @@ def run(
             )
     if not latest_link.exists():
         try:
-            latest_link.symlink_to(run_dir.name)
+            latest_link.symlink_to(run_timestamp)
         except OSError as e:
             print(f"Could not create 'latest' symlink: {e}", file=sys.stderr)
 
     return 1 if stopped_early else 0
-
-
-def main() -> int:
-    script_dir = Path(__file__).resolve().parent
-    api_keys_path = script_dir / "api-keys.json"
-
-    parser = argparse.ArgumentParser(
-        description="Report Kibana saved objects that reference legacy metric names (read-only)."
-    )
-    parser.add_argument(
-        "--clusters",
-        required=True,
-        help="Path to file with one Kibana base URL per line",
-    )
-    parser.add_argument(
-        "--metrics",
-        required=True,
-        help="Path to JSON file with metrics mapping: [{\"old\": \"...\", \"new\": \"...\"}, ...]",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default="./out",
-        help="Directory for report and errors JSON (default: ./out)",
-    )
-    args = parser.parse_args()
-
-    try:
-        clusters = load_cluster_list(args.clusters)
-        metrics_config = load_metrics_config(args.metrics)
-    except Exception as e:
-        print(f"Error loading config: {e}", file=sys.stderr)
-        return 1
-
-    credentials_map = {}
-    if api_keys_path.exists():
-        try:
-            credentials_map = load_credentials_map(str(api_keys_path))
-        except Exception as e:
-            print(f"Error loading API keys file: {e}", file=sys.stderr)
-            return 1
-
-    return run(
-        clusters=clusters,
-        metrics_config=metrics_config,
-        output_dir=args.output_dir,
-        credentials_map=credentials_map,
-        api_keys_path=api_keys_path,
-    )
-
-
-if __name__ == "__main__":
-    sys.exit(main())
