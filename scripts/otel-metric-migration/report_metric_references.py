@@ -117,8 +117,9 @@ def run(
         return kibana_client.export_saved_objects(url, creds)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    report_path = Path(output_dir) / f"metric_references_report_{timestamp}.json"
-    errors_path = Path(output_dir) / f"metric_report_errors_{timestamp}.json"
+    run_dir = Path(output_dir) / timestamp
+    report_path = run_dir / "metric_references_report.json"
+    errors_path = run_dir / "metric_report_errors.json"
 
     results = []
     consecutive_failures = 0
@@ -145,7 +146,7 @@ def run(
         results, max_consecutive_failures
     )
 
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
     report = core.build_full_report(cluster_entries, metrics_config)
     report_path.write_text(json.dumps(report, indent=2))
 

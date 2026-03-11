@@ -36,8 +36,8 @@ Options:
 
 ## Output
 
-- **Report:** `./out/metric_references_report_<timestamp>.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
-- **Errors:** If any cluster failed, `./out/metric_report_errors_<timestamp>.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
+- **Report:** `./out/<timestamp>/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
+- **Errors:** If any cluster failed, `./out/<timestamp>/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
 
 The script stops after 5 consecutive cluster failures and exits with code 1; the report still contains all successfully processed clusters.
 
