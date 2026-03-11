@@ -1,0 +1,4 @@
+# Credentials and cache; never commit.
+credentials.json
+.cache/
+out

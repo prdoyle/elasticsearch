@@ -32,7 +32,7 @@ Options:
 
 - **API key:** Create an API key in Kibana (after logging in with Okta), then add the cluster URL and key to a JSON file and pass it with `--credentials`. This avoids opening a browser per cluster.
 - **Browser (Okta):** If you do not provide an API key for a cluster, the script opens a browser to the Kibana URL. Log in via Okta; the script then captures the session and uses it for the export request. The session is cached for 45 minutes.
-- If a request returns 401, the script invalidates the cache for that cluster and (if not `--no-browser`) will prompt for browser login again on the next run.
+- If a request returns 401, the script invalidates the cache for that cluster and (if not `--no-browser`) retries once with browser login. If that still fails, the script opens the Kibana API key management page in your browser and prompts you to paste a newly created API key (input is not echoed). If you paste a key and the export succeeds, the key is always saved to the credentials file (`--credentials` if set, otherwise `credentials.json` in this directory, which is gitignored) so future runs use it without prompting.
 
 ## Output
 

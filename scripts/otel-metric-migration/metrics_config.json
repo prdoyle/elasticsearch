@@ -1,0 +1,22 @@
+[
+  { "old": "jvm.memory.heap.used", "new": "TODO" },
+  { "old": "jvm.memory.heap.committed", "new": "TODO" },
+  { "old": "jvm.memory.heap.max", "new": "TODO" },
+  { "old": "jvm.memory.non_heap.used", "new": "TODO" },
+  { "old": "jvm.memory.non_heap.committed", "new": "TODO" },
+  { "old": "jvm.memory.non_heap.max", "new": "TODO" },
+  { "old": "jvm.memory.heap.pool.used", "new": "TODO" },
+  { "old": "jvm.memory.heap.pool.committed", "new": "TODO" },
+  { "old": "jvm.memory.heap.pool.max", "new": "TODO" },
+  { "old": "jvm.gc.count", "new": "TODO" },
+  { "old": "jvm.gc.time", "new": "TODO" },
+  { "old": "jvm.gc.alloc", "new": "TODO" },
+  { "old": "jvm.thread.count", "new": "TODO" },
+  { "old": "jvm.classes.loaded", "new": "TODO" },
+  { "old": "system.fd.open", "new": "TODO" },
+  { "old": "system.fd.max", "new": "TODO" },
+  { "old": "system.cpu.total.norm.pct", "new": "TODO" },
+  { "old": "system.process.cpu.total.norm.pct", "new": "TODO" },
+  { "old": "system.memory.total", "new": "TODO" },
+  { "old": "system.memory.free", "new": "TODO" }
+]

@@ -2,13 +2,19 @@
 
 This directory is **phase 1** of an OTel metric migration: a **read-only** reporter that finds Kibana saved objects referencing legacy metric names across many clusters. It does not modify saved objects or indices.
 
+**Design goal:** The script should run **unattended to the greatest extent possible in a secure fashion** (e.g. persist credentials in gitignored locations, avoid echoing secrets, support API keys so browser interaction is only needed when necessary).
+
 ## Entry point
 
 - **`report_metric_references.py`** – The only script you run. It has the shebang and `if __name__ == "__main__"`. All other `.py` files here are helper libraries.
 
-## Design: logic vs I/O
+## Design: logic vs I/O and unit testing
 
-Logic that can be unit tested is separated from I/O (files, network, browser). Pure functions live in dedicated modules and take in-memory data; the main script and auth/kibana_client do the I/O and call into those functions.
+We separate **pure logic** from **I/O and side effects** so that business rules and branching can be **unit-tested to the greatest possible extent** without touching the network, filesystem, or browser.
+
+- **Pure logic** lives in dedicated modules (`core`, `report_builder`, and the testable parts of `auth`). These functions take in-memory inputs (strings, dicts, lists) and return in-memory outputs. They do not read files, open sockets, or launch browsers. All such code is covered by unit tests in `tests/test_*.py` with no mocks of real services: we just call the functions with crafted data and assert on return values.
+- **I/O and side effects** are confined to thin wrappers or the main script: file read/write, HTTP calls, Playwright, `webbrowser.open`, `getpass`, etc. The main orchestration code (`report_metric_references.run`, `process_cluster`) receives **injectable** dependencies (e.g. `get_credentials_fn`, `export_fn`) so that tests can supply fake credential and export behavior without doing real I/O. Where we cannot easily inject (e.g. `getpass`, `webbrowser.open`), we mock them in tests so that the 401 + paste-key flow and similar paths are still testable.
+- **Result:** The vast majority of behavior—URL normalization, config parsing, scan logic, stop policy, credential validation, cache TTL—is covered by fast, deterministic unit tests. Only the thin I/O layers and integration-style flows are left to manual or integration testing.
 
 | Module | Role | Pure (tested) | I/O (not unit tested) |
 |--------|------|----------------|------------------------|
