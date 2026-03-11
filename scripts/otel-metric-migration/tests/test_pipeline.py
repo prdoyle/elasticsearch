@@ -57,17 +57,24 @@ def test_validate_step_name_invalid_characters():
 
 
 def test_step_output_dir_default_base():
-    """Step output dir is script_dir / base / run_timestamp / step_name."""
+    """Step output dir is script_dir / base / run_timestamp / env_name / verb."""
     assert pipeline.step_output_dir(
-        Path("/script"), "out", "20250101T120000Z", "qa_report"
-    ) == Path("/script/out/20250101T120000Z/qa_report")
+        Path("/script"), "out", "20250101T120000Z", "qa", "report"
+    ) == Path("/script/out/20250101T120000Z/qa/report")
 
 
 def test_step_output_dir_custom_base():
     """Step output dir with custom base (e.g. from config output_dir)."""
     assert pipeline.step_output_dir(
-        Path("/script"), "reports", "20250101T120000Z", "prod_report"
-    ) == Path("/script/reports/20250101T120000Z/prod_report")
+        Path("/script"), "reports", "20250101T120000Z", "prod", "report"
+    ) == Path("/script/reports/20250101T120000Z/prod/report")
+
+
+def test_step_output_dir_export_verb():
+    """Step output dir for export verb under env."""
+    assert pipeline.step_output_dir(
+        Path("/script"), "out", "20250101T120000Z", "qa", "export"
+    ) == Path("/script/out/20250101T120000Z/qa/export")
 
 
 # ---- parse_config ----

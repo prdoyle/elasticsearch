@@ -34,7 +34,7 @@ pip install -r requirements.txt
 ./omm <env> <verb>
 ```
 
-Example: `./omm qa report` runs the **report** verb for the **qa** environment (using `config.yaml`). Output goes under `./out/<timestamp>/report/`.
+Example: `./omm qa report` runs the **report** verb for the **qa** environment (using `config.yaml`). Output goes under `./out/<timestamp>/<env>/report/` (e.g. `./out/<timestamp>/qa/report/`).
 
 ## Authentication
 
@@ -42,9 +42,9 @@ Example: `./omm qa report` runs the **report** verb for the **qa** environment (
 
 ## Output
 
-- **Report:** `./out/<timestamp>/report/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
-- **Errors:** If any cluster failed, `./out/<timestamp>/report/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
-- **Latest:** `./out/latest` is a symlink to the most recent `<timestamp>` directory.
+- **Report:** `./out/<timestamp>/<env>/report/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
+- **Errors:** If any cluster failed, `./out/<timestamp>/<env>/report/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
+- **Latest:** `./out/latest` is a symlink to the most recent `<timestamp>` directory (so `./out/latest/<env>/report/` is the latest report for that env).
 
 The script stops after 5 consecutive cluster failures and exits with code 1; the report still contains all successfully processed clusters.
 

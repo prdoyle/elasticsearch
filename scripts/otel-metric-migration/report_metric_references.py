@@ -188,8 +188,8 @@ def run(
     we hit max_consecutive_failures or could not write outputs.
 
     output_dir is the base output directory (e.g. script_dir/out). run_dir is the
-    directory for this run (output_dir/run_timestamp/step_name). Sets output_dir/latest
-    -> run_timestamp.
+    directory for this run and may be nested under timestamp (e.g. output_dir/run_timestamp/env_name/report).
+    Sets output_dir/latest -> run_timestamp (latest always points at the timestamp directory).
     """
     old_metrics = core.get_old_metric_names(metrics_config)
 
@@ -200,7 +200,8 @@ def run(
         return kibana_client.export_saved_objects(url, creds)
 
     run_dir_path = Path(run_dir)
-    output_base = run_dir_path.parent.parent
+    # run_dir may be base/ts/env/verb, so output_base is the dir containing run_timestamp
+    output_base = run_dir_path.parent.parent.parent
     report_path = run_dir_path / "metric_references_report.json"
     errors_path = run_dir_path / "metric_report_errors.json"
 

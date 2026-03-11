@@ -270,7 +270,8 @@ def test_run_creates_latest_symlink(tmp_path):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
     fixed_ts = "20250101T120000Z"
-    run_dir = output_dir / fixed_ts / "report"
+    env_name = "qa"
+    run_dir = output_dir / fixed_ts / env_name / "report"
     one_entry = {"cluster": "https://x.com", "saved_objects": []}
     with patch("report_metric_references.process_cluster", return_value=(one_entry, [])):
         report_metric_references.run(
@@ -287,11 +288,13 @@ def test_run_creates_latest_symlink(tmp_path):
     latest = output_dir / "latest"
     assert latest.is_symlink()
     assert str(latest.readlink()) == fixed_ts
-    assert (output_dir / "latest" / "report" / "metric_references_report.json").exists()
+    assert (
+        output_dir / "latest" / env_name / "report" / "metric_references_report.json"
+    ).exists()
 
 
 def test_run_with_run_dir_uses_timestamp_step_path(tmp_path):
-    """run() with run_dir and run_timestamp writes to run_dir and sets base/latest -> run_timestamp."""
+    """run() with run_dir (ts/env/verb) and run_timestamp writes to run_dir and sets base/latest -> run_timestamp."""
     try:
         (tmp_path / "dummy").write_text("")
         (tmp_path / "latest").symlink_to("dummy")
@@ -302,7 +305,8 @@ def test_run_with_run_dir_uses_timestamp_step_path(tmp_path):
     output_base = tmp_path / "out"
     output_base.mkdir()
     run_timestamp = "20250101T120000Z"
-    run_dir = output_base / run_timestamp / "qa_report"
+    env_name = "qa"
+    run_dir = output_base / run_timestamp / env_name / "report"
     one_entry = {"cluster": "https://x.com", "saved_objects": []}
     with patch("report_metric_references.process_cluster", return_value=(one_entry, [])):
         report_metric_references.run(
@@ -319,4 +323,6 @@ def test_run_with_run_dir_uses_timestamp_step_path(tmp_path):
     latest = output_base / "latest"
     assert latest.is_symlink()
     assert str(latest.readlink()) == run_timestamp
-    assert (output_base / "latest" / "qa_report" / "metric_references_report.json").exists()
+    assert (
+        output_base / "latest" / env_name / "report" / "metric_references_report.json"
+    ).exists()

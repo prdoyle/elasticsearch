@@ -42,6 +42,7 @@ def _report_handler(
     config_dir: Path,
     metrics_list: list[dict[str, object]],
     run_timestamp: str,
+    env_name: str,
 ) -> int:
     """Run the report verb: load clusters, credentials, call run()."""
     pipeline.validate_env_config(env_config)
@@ -49,7 +50,7 @@ def _report_handler(
     base = str(env_config.get("output_dir", "out"))
     output_dir_base = script_dir / base
     run_dir = pipeline.step_output_dir(
-        script_dir, base, run_timestamp, "report"
+        script_dir, base, run_timestamp, env_name, "report"
     )
     api_keys_path = script_dir / "api-keys.json"
 
@@ -129,7 +130,7 @@ def main() -> int:
     config_dir = config_path.resolve().parent
     run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     code = handler(
-        env_config, script_dir, config_dir, metrics_list, run_timestamp
+        env_config, script_dir, config_dir, metrics_list, run_timestamp, args.env
     )
     return code
 

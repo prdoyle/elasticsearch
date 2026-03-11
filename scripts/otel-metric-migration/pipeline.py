@@ -50,13 +50,18 @@ def validate_step_name(step_name: str) -> None:
 
 
 def step_output_dir(
-    script_dir: Path, base: str, run_timestamp: str, step_name: str
+    script_dir: Path,
+    base: str,
+    run_timestamp: str,
+    env_name: str,
+    verb: str,
 ) -> Path:
     """
-    Return the path used for a step's output directory: script_dir / base / run_timestamp / step_name.
-    No I/O; pure path construction for testability.
+    Return the path for a verb's output under an env-scoped run:
+    script_dir / base / run_timestamp / env_name / verb.
+    The env name replaces the old "step name" level. No I/O; pure path construction for testability.
     """
-    return script_dir / base / run_timestamp / step_name
+    return script_dir / base / run_timestamp / env_name / verb
 
 
 def parse_config(data: Any) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:

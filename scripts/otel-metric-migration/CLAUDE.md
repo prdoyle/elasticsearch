@@ -25,7 +25,7 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 | **report_builder** | Parse cluster list and credentials file content; turn a stream of saved objects into one cluster entry; apply “stop after N consecutive failures” over results. | Yes – all of it. | None. |
 | **auth** | Resolve credentials from API key map only. Build credential dicts; cluster slug (for tests). | `cluster_slug`, `get_credentials_from_api_key`, `get_credentials`. | None. |
 | **kibana_client** | POST Kibana saved-objects export, stream NDJSON, yield parsed objects. | None. | HTTP only. |
-| **pipeline** | Parse config YAML (environments + metrics); get_env_config; validate env config; step_output_dir (path for step output). | Yes – all of it. | None. |
+| **pipeline** | Parse config YAML (environments + metrics); get_env_config; validate env config; step_output_dir (path for verb output under env: base/ts/env/verb). | Yes – all of it. | None. |
 | **report_metric_references** | `run()` and loaders: loop over clusters, call auth and export, collect results, write report and errors JSON. | None. | File read/write; delegates to auth and kibana_client. |
 
 ## Flow
@@ -47,7 +47,7 @@ For each cluster URL:
 **Finish**
 
 - Decide whether we hit the “stop after N consecutive failures” limit (report_builder.apply_stop_policy).
-- Build the full report structure and write `metric_references_report.json` and, if there were failures, `metric_report_errors.json` (core, report_metric_references).
+- Build the full report structure and write `metric_references_report.json` and, if there were failures, `metric_report_errors.json` under the run dir (core, report_metric_references). Run dir layout: `out/<timestamp>/<env>/report/`; `out/latest` is a symlink to the most recent `<timestamp>` directory.
 
 ## Running and testing
 
