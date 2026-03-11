@@ -1,4 +1,5 @@
 # Paths (e.g. clusters) are relative to this config file's directory.
+# Optional: export_batch_size (integer, default 10000) caps objects per Kibana export request.
 environments:
   qa:
     clusters: qa-clusters.txt

@@ -35,9 +35,14 @@ def export_saved_objects(
     base_url: str,
     credentials: dict[str, Any],
     timeout: int = EXPORT_TIMEOUT_SECONDS,
+    objects: list[dict[str, str]] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """
-    POST /api/saved_objects/_export with type ["*"], stream NDJSON and yield each object as a dict.
+    POST /api/saved_objects/_export; stream NDJSON and yield each object as a dict.
+
+    If objects is None, uses type ["*"] to export all. If objects is provided, uses
+    body parameter "objects" (list of {"type": str, "id": str}); cannot be combined
+    with type. Max objects per request is limited by Kibana's savedObjects.maxImportExportSize.
 
     credentials: dict with either
       - "headers": dict of HTTP headers (must include kbn-xsrf and optionally Authorization), or
@@ -48,7 +53,10 @@ def export_saved_objects(
     if "kbn-xsrf" not in headers and "kbn-xsrf" not in (k.lower() for k in headers):
         headers["kbn-xsrf"] = "true"
     cookies = credentials.get("cookies")
-    payload = {"type": ["*"], "excludeExportDetails": True}
+    if objects is not None:
+        payload = {"objects": objects, "excludeExportDetails": True}
+    else:
+        payload = {"type": ["*"], "excludeExportDetails": True}
 
     with requests.post(
         url,

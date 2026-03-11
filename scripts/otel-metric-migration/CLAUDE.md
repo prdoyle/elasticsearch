@@ -7,7 +7,8 @@ This directory is **phase 1** of an OTel metric migration: a **read-only** repor
 ## Entry point
 
 - **`omm.py`** and the **`omm`** bash wrapper – Entry point: `omm <env> <verb>` (e.g. `omm qa report`). Loads `config.yaml` (environments + metrics), dispatches to the verb. The wrapper runs `omm.py` in the venv and passes arguments through.
-- **`report_metric_references.py`** – Library: `run()` and loaders used by omm. All other `.py` files are helper libraries.
+- **`report_metric_references.py`** – Library: `run()` and loaders used by omm for the report verb.
+- **`export_saved_objects.py`** – Library: `run()` for the export verb; reads report from latest run, exports saved objects to NDJSON per cluster. All other `.py` files are helper libraries.
 
 ## Design: logic vs I/O and unit testing
 
@@ -25,8 +26,9 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 | **report_builder** | Parse cluster list and credentials file content; turn a stream of saved objects into one cluster entry; apply “stop after N consecutive failures” over results. | Yes – all of it. | None. |
 | **auth** | Resolve credentials from API key map only. Build credential dicts; cluster slug (for tests). | `cluster_slug`, `get_credentials_from_api_key`, `get_credentials`. | None. |
 | **kibana_client** | POST Kibana saved-objects export, stream NDJSON, yield parsed objects. | None. | HTTP only. |
-| **pipeline** | Parse config YAML (environments + metrics); get_env_config; validate env config; step_output_dir (path for verb output under env: base/ts/env/verb). | Yes – all of it. | None. |
+| **pipeline** | Parse config YAML (environments + metrics); get_env_config; validate env config; step_output_dir; resolve_latest_run_dir (path that latest symlink points to). | Yes – all of it. | None. |
 | **report_metric_references** | `run()` and loaders: loop over clusters, call auth and export, collect results, write report and errors JSON. | None. | File read/write; delegates to auth and kibana_client. |
+| **export_saved_objects** | `run()`: load report from latest run, export saved objects per cluster (chunked by batch size), write NDJSON to latest/<env>/export/. | Chunking and object-ref extraction. | File read/write; HTTP via kibana_client. |
 
 ## Flow
 
@@ -53,7 +55,7 @@ For each cluster URL:
 
 - **Agents must not run against real clusters to verify behavior.** Scripts issue HTTP requests to Kibana/Elasticsearch. Use `pytest tests/ -v` instead; manual runs are for operators hitting real clusters with appropriate config.
   - Humans: the responsibility is still yours. Agents gonna agent. Test without network, or without VPN, or against QA. Use your judgement.
-- **Run:** `omm <env> <verb>` (e.g. `omm qa report`). Config: `config.yaml` with environments and metrics (see README).
+- **Run:** `omm <env> <verb>` (e.g. `omm qa report`, `omm qa export`). Config: `config.yaml` with environments and metrics; optional top-level `export_batch_size` for export. The **export** verb uses `out/latest` (run report first).
 - **Tests:** `pytest tests/ -v`; in-memory only, conftest.py adds this directory to `sys.path`.
 
 ## Conventions

@@ -7,6 +7,7 @@ This script produces a **read-only report** of Kibana saved objects that referen
 - **config.yaml** in this directory defines **environments** (first) and **metrics**. Paths in the config (e.g. cluster list file) are relative to the config file’s directory. See `config.yaml` in this repo.
 - **Environments:** Each environment has a `clusters` path to a file with one Kibana base URL per line. Cluster list files stay separate (often large or auto-generated).
 - **Metrics:** The `metrics` section is a list of `{old: "<name>", new: {name: "<name>", dimensions: {...}}}`. The script searches for the `old` names.
+- **Optional:** Top-level `export_batch_size` (integer, default 10,000) in `config.yaml` caps the number of objects per Kibana export API request when using the export verb.
 
 ## Setup (Python virtual environment)
 
@@ -34,7 +35,7 @@ pip install -r requirements.txt
 ./omm <env> <verb>
 ```
 
-Example: `./omm qa report` runs the **report** verb for the **qa** environment (using `config.yaml`). Output goes under `./out/<timestamp>/<env>/report/` (e.g. `./out/<timestamp>/qa/report/`).
+Examples: `./omm qa report` runs the **report** verb (output under `./out/<timestamp>/<env>/report/`). `./omm qa export` runs the **export** verb: it requires a **latest** run (run report first); it reads the report and writes exported saved objects to `./out/latest/<env>/export/` as NDJSON per cluster.
 
 ## Authentication
 
@@ -45,8 +46,9 @@ Example: `./omm qa report` runs the **report** verb for the **qa** environment (
 - **Report:** `./out/<timestamp>/<env>/report/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
 - **Errors:** If any cluster failed, `./out/<timestamp>/<env>/report/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
 - **Latest:** `./out/latest` is a symlink to the most recent `<timestamp>` directory (so `./out/latest/<env>/report/` is the latest report for that env).
+- **Export:** `./omm <env> export` writes `./out/latest/<env>/export/<cluster_slug>.ndjson` (one NDJSON file per cluster). Requires that `./out/latest` exists (run report first). Optional: `./out/latest/<env>/export/export_errors.json` if any cluster failed.
 
-The script stops after 5 consecutive cluster failures and exits with code 1; the report still contains all successfully processed clusters.
+The report verb stops after 5 consecutive cluster failures and exits with code 1; the report still contains all successfully processed clusters.
 
 ## Elasticsearch URL
 

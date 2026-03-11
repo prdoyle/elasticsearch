@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Unit tests for config parsing: parse_config, get_env_config, validate_env_config, validate_step_name, step_output_dir."""
+"""Unit tests for config parsing: parse_config, get_env_config, validate_env_config, validate_step_name, step_output_dir, resolve_latest_run_dir."""
 
 from pathlib import Path
 
@@ -175,3 +175,41 @@ def test_validate_env_config_empty_clusters():
     """Empty 'clusters' raises."""
     with pytest.raises(ValueError, match="'clusters'"):
         pipeline.validate_env_config({"clusters": ""})
+
+
+# ---- resolve_latest_run_dir ----
+
+
+def test_resolve_latest_run_dir_success(tmp_path):
+    """When latest exists and is a valid symlink, returns resolved timestamp dir."""
+    base = "out"
+    script_dir = tmp_path
+    ts_dir = script_dir / base / "20250101T120000Z"
+    ts_dir.mkdir(parents=True)
+    try:
+        (script_dir / base).mkdir(parents=True, exist_ok=True)
+        (script_dir / base / "latest").symlink_to("20250101T120000Z")
+    except OSError:
+        pytest.skip("Symlinks not supported")
+    result = pipeline.resolve_latest_run_dir(script_dir, base)
+    assert result == ts_dir.resolve()
+    assert result.exists()
+
+
+def test_resolve_latest_run_dir_missing(tmp_path):
+    """When latest does not exist, raises ValueError."""
+    (tmp_path / "out").mkdir(parents=True)
+    with pytest.raises(ValueError, match="No latest run found"):
+        pipeline.resolve_latest_run_dir(tmp_path, "out")
+
+
+def test_resolve_latest_run_dir_broken_symlink(tmp_path):
+    """When latest is a broken symlink, raises ValueError."""
+    base_dir = tmp_path / "out"
+    base_dir.mkdir(parents=True)
+    try:
+        (base_dir / "latest").symlink_to("nonexistent_timestamp")
+    except OSError:
+        pytest.skip("Symlinks not supported")
+    with pytest.raises(ValueError, match="broken"):
+        pipeline.resolve_latest_run_dir(tmp_path, "out")

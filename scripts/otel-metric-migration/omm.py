@@ -30,10 +30,12 @@ from pathlib import Path
 
 import yaml
 
+import export_saved_objects
 import pipeline
 import report_metric_references
 
 CONFIG_FILENAME = "config.yaml"
+DEFAULT_EXPORT_BATCH_SIZE = 10_000
 
 
 def _report_handler(
@@ -43,6 +45,7 @@ def _report_handler(
     metrics_list: list[dict[str, object]],
     run_timestamp: str,
     env_name: str,
+    config_data: dict[str, object] | None = None,
 ) -> int:
     """Run the report verb: load clusters, credentials, call run()."""
     pipeline.validate_env_config(env_config)
@@ -81,8 +84,48 @@ def _report_handler(
     )
 
 
+def _export_handler(
+    env_config: dict[str, object],
+    script_dir: Path,
+    config_dir: Path,
+    metrics_list: list[dict[str, object]],
+    run_timestamp: str,
+    env_name: str,
+    config_data: dict[str, object] | None = None,
+) -> int:
+    """Run the export verb: resolve latest, load report, export saved objects to NDJSON."""
+    pipeline.validate_env_config(env_config)
+    base = str(env_config.get("output_dir", "out"))
+    try:
+        latest_dir = pipeline.resolve_latest_run_dir(script_dir, base)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    work_dir = latest_dir / env_name
+    export_batch_size = DEFAULT_EXPORT_BATCH_SIZE
+    if config_data is not None and isinstance(config_data.get("export_batch_size"), int):
+        export_batch_size = int(config_data["export_batch_size"])
+    api_keys_path = script_dir / "api-keys.json"
+    credentials_map = {}
+    if api_keys_path.exists():
+        try:
+            credentials_map = report_metric_references.load_credentials_map(
+                str(api_keys_path)
+            )
+        except Exception as e:
+            print(f"Error loading API keys file: {e}", file=sys.stderr)
+            return 1
+    return export_saved_objects.run(
+        work_dir=work_dir,
+        credentials_map=credentials_map,
+        api_keys_path=api_keys_path,
+        export_batch_size=export_batch_size,
+    )
+
+
 VERB_REGISTRY: dict[str, object] = {
     "report": _report_handler,
+    "export": _export_handler,
 }
 
 
@@ -130,7 +173,13 @@ def main() -> int:
     config_dir = config_path.resolve().parent
     run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     code = handler(
-        env_config, script_dir, config_dir, metrics_list, run_timestamp, args.env
+        env_config,
+        script_dir,
+        config_dir,
+        metrics_list,
+        run_timestamp,
+        args.env,
+        config_data=loaded,
     )
     return code
 

@@ -64,6 +64,28 @@ def step_output_dir(
     return script_dir / base / run_timestamp / env_name / verb
 
 
+def resolve_latest_run_dir(script_dir: Path, base: str) -> Path:
+    """
+    Return the directory that the "latest" symlink points to (the timestamp run dir).
+    Used by verbs that consume a previous run (e.g. export). Pure path logic; no I/O
+    beyond existence check. Raises ValueError with a clear message if latest is missing
+    or a broken symlink.
+    """
+    path = script_dir / base / "latest"
+    if path.is_symlink():
+        resolved = path.resolve()
+        if not resolved.exists():
+            raise ValueError(
+                "No latest run found; 'latest' symlink is broken."
+            )
+        return resolved
+    if not path.exists():
+        raise ValueError(
+            "No latest run found; run 'omm <env> report' first."
+        )
+    return path.resolve()
+
+
 def parse_config(data: Any) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """
     Validate config dict and return (metrics_list, environments_map).
