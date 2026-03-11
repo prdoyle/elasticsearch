@@ -4,8 +4,9 @@ This script produces a **read-only report** of Kibana saved objects that referen
 
 ## Inputs
 
-- **Cluster list:** A file with one Kibana base URL per line (e.g. `https://platform-metrics.kb.af-south-1.aws.elastic-cloud.com`). See `clusters.txt.example`.
-- **Metrics config:** A JSON file with an array of `{"old": "<metric_name>", "new": "<metric_name>"}`. The script searches for the `old` names. See `metrics_config.json.example`.
+- **config.yaml** in this directory defines **environments** (first) and **metrics**. Paths in the config (e.g. cluster list file) are relative to the config file’s directory. See `config.yaml` in this repo.
+- **Environments:** Each environment has a `clusters` path to a file with one Kibana base URL per line. Cluster list files stay separate (often large or auto-generated).
+- **Metrics:** The `metrics` section is a list of `{old: "<name>", new: {name: "<name>", dimensions: {...}}}`. The script searches for the `old` names.
 
 ## Setup (Python virtual environment)
 
@@ -30,10 +31,10 @@ From this directory, with the venv activated (see Setup above):
 source .venv/bin/activate   # do this first in each new terminal
 pip install -r requirements.txt
 
-./omm qa-report
+./omm <env> <verb>
 ```
 
-Use a YAML preset (e.g. `qa-report.yaml`) that defines steps; each step’s output goes under `./out/<timestamp>/<step_name>/`.
+Example: `./omm qa report` runs the **report** verb for the **qa** environment (using `config.yaml`). Output goes under `./out/<timestamp>/report/`.
 
 ## Authentication
 
@@ -41,8 +42,8 @@ Use a YAML preset (e.g. `qa-report.yaml`) that defines steps; each step’s outp
 
 ## Output
 
-- **Report:** `./out/<timestamp>/<step_name>/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
-- **Errors:** If any cluster failed, `./out/<timestamp>/<step_name>/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
+- **Report:** `./out/<timestamp>/report/metric_references_report.json` – Lists each cluster and, for each, saved objects that reference any of the old metric names, with type, id, title, and where each metric appears (path and snippet). Includes `metrics_config_used` and `generated_at`.
+- **Errors:** If any cluster failed, `./out/<timestamp>/report/metric_report_errors.json` – One entry per failure with `cluster`, `phase` (auth or export), and `error`. Includes `consecutive_failure_count`.
 - **Latest:** `./out/latest` is a symlink to the most recent `<timestamp>` directory.
 
 The script stops after 5 consecutive cluster failures and exits with code 1; the report still contains all successfully processed clusters.

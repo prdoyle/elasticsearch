@@ -6,7 +6,7 @@ This directory is **phase 1** of an OTel metric migration: a **read-only** repor
 
 ## Entry point
 
-- **`omm.py`** and the **`omm`** bash wrapper – Preferred way to run a pipeline from a YAML preset (e.g. `omm qa-report.yaml`). The wrapper runs `omm.py` in the venv and passes arguments through.
+- **`omm.py`** and the **`omm`** bash wrapper – Entry point: `omm <env> <verb>` (e.g. `omm qa report`). Loads `config.yaml` (environments + metrics), dispatches to the verb. The wrapper runs `omm.py` in the venv and passes arguments through.
 - **`report_metric_references.py`** – Library: `run()` and loaders used by omm. All other `.py` files are helper libraries.
 
 ## Design: logic vs I/O and unit testing
@@ -17,7 +17,7 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 - **I/O and side effects** stay in thin wrappers and the main script. Orchestration (`report_metric_references.run`, `process_cluster`) uses **injectable** dependencies (`get_credentials_fn`, `export_fn`, `collect_api_key_fn`) so tests can supply fakes. **collect_api_key_fn** decides whether to prompt: `_collect_api_key_via_browser` checks `sys.stdin.isatty()`, returns `""` with a hint when non-interactive, and opens the browser for a pasted key when interactive (no separate `interactive` parameter).
 - **Orchestration** (load file → parse → loop and dispatch) is not unit tested. We extract testable logic into pure functions and test those. The wiring is kept simple with minimal conditionals so it either works or fails as a whole, which makes it easy to verify with manual or integration tests.
 - **Behavioural change without unit test changes = test gap.** Add or adjust tests so future changes to that behaviour show up in the suite; then every behavioural change is manifest in pull requests. Exception: I/O and orchestration (see above) are not unit tested.
-- **Result:** The vast majority of behaviour—URL normalization, config parsing, scan logic, stop policy, credential validation, cache TTL, pipeline and preset parsing, step output path—is covered by fast, deterministic unit tests. I/O and integration-style flows are left to manual or integration testing.
+- **Result:** The vast majority of behaviour—URL normalization, config parsing, scan logic, stop policy, credential validation, cache TTL, config file parsing (environments + metrics), step output path—is covered by fast, deterministic unit tests. I/O and integration-style flows are left to manual or integration testing.
 
 | Module | Role | Pure (tested) | I/O (not unit tested) |
 |--------|------|----------------|------------------------|
@@ -25,14 +25,14 @@ We separate **pure logic** from **I/O and side effects** so that business rules 
 | **report_builder** | Parse cluster list and credentials file content; turn a stream of saved objects into one cluster entry; apply “stop after N consecutive failures” over results. | Yes – all of it. | None. |
 | **auth** | Resolve credentials from API key map only. Build credential dicts; cluster slug (for tests). | `cluster_slug`, `get_credentials_from_api_key`, `get_credentials`. | None. |
 | **kibana_client** | POST Kibana saved-objects export, stream NDJSON, yield parsed objects. | None. | HTTP only. |
-| **pipeline** | Parse preset YAML into (step_name, verb, config) steps; validate report config and step names; resolve preset filename; step_output_dir (path for step output). | Yes – all of it. | None. |
+| **pipeline** | Parse config YAML (environments + metrics); get_env_config; validate env config; step_output_dir (path for step output). | Yes – all of it. | None. |
 | **report_metric_references** | `run()` and loaders: loop over clusters, call auth and export, collect results, write report and errors JSON. | None. | File read/write; delegates to auth and kibana_client. |
 
 ## Flow
 
 **Startup**
 
-- Load the cluster list and metrics config from the files given on the CLI (report_builder, core).
+- Load config.yaml (environments + metrics). For the chosen env, load the cluster list from the path in that env’s config (paths relative to config file); metrics come from the config’s metrics section (report_builder, core).
 - Load API keys from `api-keys.json` in this directory if the file exists (report_builder). If it doesn’t exist or is empty, the script will prompt for keys when needed.
 
 **Per cluster**
@@ -53,7 +53,7 @@ For each cluster URL:
 
 - **Agents must not run against real clusters to verify behavior.** Scripts issue HTTP requests to Kibana/Elasticsearch. Use `pytest tests/ -v` instead; manual runs are for operators hitting real clusters with appropriate config.
   - Humans: the responsibility is still yours. Agents gonna agent. Test without network, or without VPN, or against QA. Use your judgement.
-- **Run:** `omm <preset>.yaml` (e.g. `omm qa-report`) (see README).
+- **Run:** `omm <env> <verb>` (e.g. `omm qa report`). Config: `config.yaml` with environments and metrics (see README).
 - **Tests:** `pytest tests/ -v`; in-memory only, conftest.py adds this directory to `sys.path`.
 
 ## Conventions

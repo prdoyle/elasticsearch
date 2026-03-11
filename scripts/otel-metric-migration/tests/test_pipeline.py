@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Unit tests for pipeline parsing: parse_pipeline, validate_report_config, resolve_preset_filename, validate_step_name, step_output_dir."""
+"""Unit tests for config parsing: parse_config, get_env_config, validate_env_config, validate_step_name, step_output_dir."""
 
 from pathlib import Path
 
@@ -53,42 +53,6 @@ def test_validate_step_name_invalid_characters():
         pipeline.validate_step_name("..")
 
 
-# ---- resolve_preset_filename ----
-
-
-def test_resolve_preset_filename_adds_yaml_when_missing():
-    """When preset_file has no .yaml suffix, .yaml is appended."""
-    assert pipeline.resolve_preset_filename("qa-report") == "qa-report.yaml"
-
-
-def test_resolve_preset_filename_unchanged_when_has_yaml():
-    """When preset_file already ends with .yaml, it is returned unchanged."""
-    assert pipeline.resolve_preset_filename("qa-report.yaml") == "qa-report.yaml"
-
-
-def test_resolve_preset_filename_case_sensitive_yaml():
-    """Only literal .yaml suffix is recognized; .YAML gets .yaml appended."""
-    assert pipeline.resolve_preset_filename("some-preset.YAML") == "some-preset.YAML.yaml"
-
-
-def test_resolve_preset_filename_rejects_path_separator():
-    """Preset filename containing / raises ValueError."""
-    with pytest.raises(ValueError, match="path separators or '..'"):
-        pipeline.resolve_preset_filename("path/to/preset.yaml")
-
-
-def test_resolve_preset_filename_rejects_dotdot():
-    """Preset filename containing .. raises ValueError."""
-    with pytest.raises(ValueError, match="path separators or '..'"):
-        pipeline.resolve_preset_filename("../preset.yaml")
-
-
-def test_resolve_preset_filename_rejects_path_separator_and_dotdot():
-    """Preset filename containing both / and .. raises ValueError."""
-    with pytest.raises(ValueError, match="path separators or '..'"):
-        pipeline.resolve_preset_filename("foo/../bar.yaml")
-
-
 # ---- step_output_dir ----
 
 
@@ -106,230 +70,101 @@ def test_step_output_dir_custom_base():
     ) == Path("/script/reports/20250101T120000Z/prod_report")
 
 
-# ---- parse_pipeline: valid cases ----
+# ---- parse_config ----
 
 
-def test_parse_pipeline_single_step():
-    """Single step with step name and do yields one (step_name, verb, config) tuple."""
+def test_parse_config_valid():
+    """Valid config with environments and metrics returns (metrics_list, environments)."""
     data = {
-        "steps": [
-            {
-                "qa_report": {
-                    "do": "report",
-                    "clusters": "clusters.txt",
-                    "metrics": "metrics_config.json",
-                }
-            }
-        ]
+        "environments": {"qa": {"clusters": "qa-clusters.txt"}},
+        "metrics": [
+            {"old": "m1", "new": {"name": "m2", "dimensions": {}}},
+        ],
     }
-    result = pipeline.parse_pipeline(data)
-    assert result == [
-        (
-            "qa_report",
-            "report",
-            {"clusters": "clusters.txt", "metrics": "metrics_config.json"},
+    metrics_list, environments = pipeline.parse_config(data)
+    assert len(metrics_list) == 1
+    assert metrics_list[0]["old"] == "m1"
+    assert metrics_list[0]["new"] == {"name": "m2", "dimensions": {}}
+    assert environments == {"qa": {"clusters": "qa-clusters.txt"}}
+
+
+def test_parse_config_missing_environments():
+    """Config without 'environments' raises."""
+    with pytest.raises(ValueError, match="'environments'"):
+        pipeline.parse_config({"metrics": []})
+
+
+def test_parse_config_missing_metrics():
+    """Config without 'metrics' raises."""
+    with pytest.raises(ValueError, match="'metrics'"):
+        pipeline.parse_config({"environments": {"qa": {"clusters": "c.txt"}}})
+
+
+def test_parse_config_empty_environments():
+    """Config with empty environments raises."""
+    with pytest.raises(ValueError, match="non-empty"):
+        pipeline.parse_config(
+            {"environments": {}, "metrics": [{"old": "a", "new": {"name": "b", "dimensions": {}}}]}
         )
-    ]
 
 
-def test_parse_pipeline_two_steps():
-    """Two steps yield two tuples in list order."""
-    data = {
-        "steps": [
+def test_parse_config_invalid_metrics_shape():
+    """Invalid metrics (e.g. missing 'old') raises."""
+    with pytest.raises(ValueError, match="metrics"):
+        pipeline.parse_config(
             {
-                "qa_report": {
-                    "do": "report",
-                    "clusters": "qa-clusters.txt",
-                    "metrics": "metrics_config.json",
-                }
-            },
-            {
-                "prod_report": {
-                    "do": "report",
-                    "clusters": "prod-clusters.txt",
-                    "metrics": "metrics_config.json",
-                }
-            },
-        ]
-    }
-    result = pipeline.parse_pipeline(data)
-    assert len(result) == 2
-    assert result[0] == (
-        "qa_report",
-        "report",
-        {"clusters": "qa-clusters.txt", "metrics": "metrics_config.json"},
-    )
-    assert result[1] == (
-        "prod_report",
-        "report",
-        {"clusters": "prod-clusters.txt", "metrics": "metrics_config.json"},
-    )
-
-
-def test_parse_pipeline_optional_output_dir():
-    """Report config with output_dir is preserved in config dict."""
-    data = {
-        "steps": [
-            {
-                "qa_report": {
-                    "do": "report",
-                    "clusters": "clusters.txt",
-                    "metrics": "metrics_config.json",
-                    "output_dir": "out",
-                }
-            }
-        ]
-    }
-    result = pipeline.parse_pipeline(data)
-    assert result[0][2]["output_dir"] == "out"
-
-
-def test_parse_pipeline_empty_steps_list():
-    """Empty steps list is valid and returns empty list."""
-    result = pipeline.parse_pipeline({"steps": []})
-    assert result == []
-
-
-# ---- parse_pipeline: invalid cases ----
-
-
-def test_parse_pipeline_root_not_dict():
-    """Root must be a dict."""
-    with pytest.raises(ValueError, match="root must be a dict"):
-        pipeline.parse_pipeline([])
-    with pytest.raises(ValueError, match="root must be a dict"):
-        pipeline.parse_pipeline("steps: []")
-
-
-def test_parse_pipeline_missing_steps_key():
-    """Root must have 'steps' key."""
-    with pytest.raises(ValueError, match="'steps' key"):
-        pipeline.parse_pipeline({})
-    with pytest.raises(ValueError, match="'steps' key"):
-        pipeline.parse_pipeline({"other": []})
-
-
-def test_parse_pipeline_steps_not_list():
-    """'steps' value must be a list."""
-    with pytest.raises(ValueError, match="'steps' must be a list"):
-        pipeline.parse_pipeline({"steps": {}})
-    with pytest.raises(ValueError, match="'steps' must be a list"):
-        pipeline.parse_pipeline({"steps": "not a list"})
-
-
-def test_parse_pipeline_step_not_dict():
-    """Each step must be a dict."""
-    with pytest.raises(ValueError, match="must be a dict"):
-        pipeline.parse_pipeline({"steps": ["string step"]})
-    with pytest.raises(ValueError, match="must be a dict"):
-        pipeline.parse_pipeline({"steps": [[{"report": {}}]]})
-
-
-def test_parse_pipeline_step_zero_keys():
-    """Step must have exactly one key (the step name)."""
-    with pytest.raises(ValueError, match="exactly one key"):
-        pipeline.parse_pipeline({"steps": [{}]})
-
-
-def test_parse_pipeline_step_two_keys():
-    """Step must have exactly one key."""
-    with pytest.raises(ValueError, match="exactly one key"):
-        pipeline.parse_pipeline(
-            {
-                "steps": [
-                    {
-                        "qa_report": {"do": "report", "clusters": "c", "metrics": "m"},
-                        "other": {"do": "report"},
-                    }
-                ]
+                "environments": {"qa": {"clusters": "c.txt"}},
+                "metrics": [{"new": {"name": "b", "dimensions": {}}}],
             }
         )
 
 
-def test_parse_pipeline_step_value_not_dict():
-    """Step value must be a dict."""
-    with pytest.raises(ValueError, match="value must be a dict"):
-        pipeline.parse_pipeline({"steps": [{"qa_report": "string"}]})
-    with pytest.raises(ValueError, match="value must be a dict"):
-        pipeline.parse_pipeline({"steps": [{"qa_report": 123}]})
+def test_parse_config_root_not_dict():
+    """Config must be a dict."""
+    with pytest.raises(ValueError, match="dict"):
+        pipeline.parse_config([])
 
 
-def test_parse_pipeline_step_missing_do():
-    """Step value must have 'do' key."""
-    with pytest.raises(ValueError, match="must have a 'do' key"):
-        pipeline.parse_pipeline(
-            {"steps": [{"qa_report": {"clusters": "c.txt", "metrics": "m.json"}}]}
-        )
+# ---- get_env_config ----
 
 
-def test_parse_pipeline_step_do_not_string():
-    """Step value 'do' must be a non-empty string."""
-    with pytest.raises(ValueError, match="'do' must be a non-empty string"):
-        pipeline.parse_pipeline(
-            {"steps": [{"qa_report": {"do": "", "clusters": "c", "metrics": "m"}}]}
-        )
-    with pytest.raises(ValueError, match="'do' must be a non-empty string"):
-        pipeline.parse_pipeline(
-            {"steps": [{"qa_report": {"do": 123, "clusters": "c", "metrics": "m"}}]}
-        )
+def test_get_env_config_valid():
+    """Valid env returns its config."""
+    environments = {"qa": {"clusters": "qa-clusters.txt"}}
+    assert pipeline.get_env_config(environments, "qa") == {
+        "clusters": "qa-clusters.txt"
+    }
 
 
-def test_parse_pipeline_invalid_step_name():
-    """Invalid step name (e.g. contains space) raises."""
+def test_get_env_config_unknown_env():
+    """Unknown env raises."""
+    environments = {"qa": {"clusters": "c.txt"}}
+    with pytest.raises(ValueError, match="unknown environment"):
+        pipeline.get_env_config(environments, "prod")
+
+
+def test_get_env_config_invalid_env_name():
+    """Invalid env name (e.g. contains space) raises."""
+    environments = {"qa": {"clusters": "c.txt"}}
     with pytest.raises(ValueError, match="non-empty and contain only"):
-        pipeline.parse_pipeline(
-            {
-                "steps": [
-                    {
-                        "bad name": {
-                            "do": "report",
-                            "clusters": "c.txt",
-                            "metrics": "m.json",
-                        }
-                    }
-                ]
-            }
-        )
+        pipeline.get_env_config(environments, "bad env")
 
 
-def test_parse_pipeline_duplicate_step_name():
-    """Duplicate step names raise."""
-    with pytest.raises(ValueError, match="duplicate step name"):
-        pipeline.parse_pipeline(
-            {
-                "steps": [
-                    {"qa_report": {"do": "report", "clusters": "c", "metrics": "m"}},
-                    {"qa_report": {"do": "report", "clusters": "c2", "metrics": "m"}},
-                ]
-            }
-        )
+# ---- validate_env_config ----
 
 
-# ---- validate_report_config ----
+def test_validate_env_config_valid():
+    """Valid env config with clusters does not raise."""
+    pipeline.validate_env_config({"clusters": "clusters.txt"})
 
 
-def test_validate_report_config_valid():
-    """Valid config with clusters and metrics does not raise."""
-    pipeline.validate_report_config(
-        {"clusters": "clusters.txt", "metrics": "metrics_config.json"}
-    )
-
-
-def test_validate_report_config_missing_clusters():
-    """Missing or empty 'clusters' raises."""
+def test_validate_env_config_missing_clusters():
+    """Missing 'clusters' raises."""
     with pytest.raises(ValueError, match="'clusters'"):
-        pipeline.validate_report_config({"metrics": "m.json"})
+        pipeline.validate_env_config({})
+
+
+def test_validate_env_config_empty_clusters():
+    """Empty 'clusters' raises."""
     with pytest.raises(ValueError, match="'clusters'"):
-        pipeline.validate_report_config(
-            {"clusters": "", "metrics": "m.json"}
-        )
-
-
-def test_validate_report_config_missing_metrics():
-    """Missing or empty 'metrics' raises."""
-    with pytest.raises(ValueError, match="'metrics'"):
-        pipeline.validate_report_config({"clusters": "c.txt"})
-    with pytest.raises(ValueError, match="'metrics'"):
-        pipeline.validate_report_config(
-            {"clusters": "c.txt", "metrics": ""}
-        )
+        pipeline.validate_env_config({"clusters": ""})

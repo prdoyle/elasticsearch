@@ -16,7 +16,7 @@
 # under the License.
 
 """
-Pure logic for parsing pipeline preset YAML into a sequence of (verb, config) steps.
+Pure logic for parsing config YAML (environments + metrics) and path helpers.
 No I/O; all functions take and return in-memory data for testability.
 """
 
@@ -25,6 +25,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
+
+import core
 
 STEP_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
@@ -47,18 +49,6 @@ def validate_step_name(step_name: str) -> None:
         )
 
 
-def resolve_preset_filename(preset_file: str) -> str:
-    """
-    Return the preset filename to use for loading (add .yaml only if not already present).
-    Raises ValueError if preset_file contains path separators or '..'.
-    """
-    if "/" in preset_file or ".." in preset_file:
-        raise ValueError("Preset filename must not contain path separators or '..'")
-    if not preset_file.endswith(".yaml"):
-        return preset_file + ".yaml"
-    return preset_file
-
-
 def step_output_dir(
     script_dir: Path, base: str, run_timestamp: str, step_name: str
 ) -> Path:
@@ -69,62 +59,43 @@ def step_output_dir(
     return script_dir / base / run_timestamp / step_name
 
 
-def parse_pipeline(yaml_data: Any) -> list[tuple[str, str, dict[str, Any]]]:
+def parse_config(data: Any) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """
-    Parse pipeline preset structure into a list of (step_name, verb, config) steps.
+    Validate config dict and return (metrics_list, environments_map).
 
-    Expects yaml_data to be a dict with key "steps" whose value is a list.
-    Each step must be a dict with exactly one key (the step name); the value must be a dict
-    that contains "do" (the verb); the rest of the value is the verb's config.
-    Step names must be unique and valid (see validate_step_name).
-    Raises ValueError if the structure is invalid.
+    Config must have "environments" (dict, non-empty) and "metrics" (list).
+    metrics_list is validated by core.parse_metrics_config. environments keys are env names.
+    Raises ValueError if structure is invalid.
     """
-    if not isinstance(yaml_data, dict):
-        raise ValueError("pipeline root must be a dict with a 'steps' key")
-    if "steps" not in yaml_data:
-        raise ValueError("pipeline must have a 'steps' key")
-    steps_raw = yaml_data["steps"]
-    if not isinstance(steps_raw, list):
-        raise ValueError("pipeline 'steps' must be a list")
-    seen_names: set[str] = set()
-    result = []
-    for i, item in enumerate(steps_raw):
-        if not isinstance(item, dict):
-            raise ValueError(f"pipeline step at index {i} must be a dict")
-        if len(item) != 1:
-            raise ValueError(
-                f"pipeline step at index {i} must have exactly one key (the step name), got {len(item)}"
-            )
-        step_name = next(iter(item.keys()))
-        validate_step_name(step_name)
-        if step_name in seen_names:
-            raise ValueError(f"duplicate step name '{step_name}' at index {i}")
-        seen_names.add(step_name)
-        value = item[step_name]
-        if not isinstance(value, dict):
-            raise ValueError(
-                f"pipeline step at index {i} '{step_name}' value must be a dict"
-            )
-        if "do" not in value:
-            raise ValueError(
-                f"pipeline step at index {i} '{step_name}' must have a 'do' key (the verb)"
-            )
-        verb = value["do"]
-        if not isinstance(verb, str) or not verb:
-            raise ValueError(
-                f"pipeline step at index {i} '{step_name}' 'do' must be a non-empty string"
-            )
-        config = {k: v for k, v in value.items() if k != "do"}
-        result.append((step_name, verb, config))
-    return result
+    if not isinstance(data, dict):
+        raise ValueError("config must be a dict with 'environments' and 'metrics'")
+    if "environments" not in data:
+        raise ValueError("config must have an 'environments' key")
+    if "metrics" not in data:
+        raise ValueError("config must have a 'metrics' key")
+    environments = data["environments"]
+    if not isinstance(environments, dict) or not environments:
+        raise ValueError("config 'environments' must be a non-empty dict")
+    metrics_raw = data["metrics"]
+    metrics_list = core.parse_metrics_config(metrics_raw)
+    return (metrics_list, environments)
 
 
-def validate_report_config(config: dict[str, Any]) -> None:
+def get_env_config(environments: dict[str, Any], env: str) -> dict[str, Any]:
     """
-    Validate that config has required keys for the report verb.
-    Raises ValueError if 'clusters' or 'metrics' is missing.
+    Return the config dict for the given env. Validates env name and that env exists.
+    Raises ValueError if env is invalid or missing.
     """
-    if not isinstance(config.get("clusters"), str) or not config["clusters"]:
-        raise ValueError("report config must have non-empty 'clusters'")
-    if not isinstance(config.get("metrics"), str) or not config["metrics"]:
-        raise ValueError("report config must have non-empty 'metrics'")
+    validate_step_name(env)
+    if env not in environments:
+        raise ValueError(f"unknown environment '{env}'")
+    return environments[env]
+
+
+def validate_env_config(env_config: dict[str, Any]) -> None:
+    """
+    Validate that env config has required keys for the report verb (non-empty 'clusters').
+    Raises ValueError if invalid.
+    """
+    if not isinstance(env_config.get("clusters"), str) or not env_config["clusters"]:
+        raise ValueError("environment config must have non-empty 'clusters'")

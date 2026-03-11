@@ -17,7 +17,8 @@
 # under the License.
 
 """
-Main entry point for otel-metric-migration: run a pipeline of verbs from a YAML preset.
+Main entry point for otel-metric-migration: omm <env> <verb>.
+Loads config.yaml (environments + metrics), dispatches to the requested verb.
 """
 
 from __future__ import annotations
@@ -32,27 +33,28 @@ import yaml
 import pipeline
 import report_metric_references
 
+CONFIG_FILENAME = "config.yaml"
+
 
 def _report_handler(
-    config: dict[str, object],
+    env_config: dict[str, object],
     script_dir: Path,
-    step_name: str,
+    config_dir: Path,
+    metrics_list: list[dict[str, object]],
     run_timestamp: str,
 ) -> int:
-    """Run the report verb: load clusters/metrics, credentials, call run()."""
-    pipeline.validate_report_config(config)
-    clusters_path = script_dir / str(config["clusters"])
-    metrics_path = script_dir / str(config["metrics"])
-    base = str(config.get("output_dir", "out"))
+    """Run the report verb: load clusters, credentials, call run()."""
+    pipeline.validate_env_config(env_config)
+    clusters_path = config_dir / str(env_config["clusters"])
+    base = str(env_config.get("output_dir", "out"))
     output_dir_base = script_dir / base
     run_dir = pipeline.step_output_dir(
-        script_dir, base, run_timestamp, step_name
+        script_dir, base, run_timestamp, "report"
     )
     api_keys_path = script_dir / "api-keys.json"
 
     try:
         clusters = report_metric_references.load_cluster_list(str(clusters_path))
-        metrics_config = report_metric_references.load_metrics_config(str(metrics_path))
     except Exception as e:
         print(f"Error loading config: {e}", file=sys.stderr)
         return 1
@@ -69,7 +71,7 @@ def _report_handler(
 
     return report_metric_references.run(
         clusters=clusters,
-        metrics_config=metrics_config,
+        metrics_config=metrics_list,
         output_dir=str(output_dir_base),
         credentials_map=credentials_map,
         api_keys_path=api_keys_path,
@@ -85,50 +87,51 @@ VERB_REGISTRY: dict[str, object] = {
 
 def main() -> int:
     script_dir = Path(__file__).resolve().parent
+    config_path = script_dir / CONFIG_FILENAME
 
     parser = argparse.ArgumentParser(
-        description="Run a pipeline from a YAML preset (e.g. omm.py qa-report.yaml or omm.py qa-report)."
+        description="Run a verb for an environment (e.g. omm qa report)."
     )
     parser.add_argument(
-        "preset_file",
-        help="Preset filename (e.g. qa-report.yaml or qa-report); loads from the script directory",
+        "env",
+        help="Environment name (must exist in config.yaml environments)",
+    )
+    parser.add_argument(
+        "verb",
+        help="Verb to run (e.g. report)",
     )
     args = parser.parse_args()
 
-    try:
-        filename = pipeline.resolve_preset_filename(args.preset_file)
-    except ValueError as e:
-        print(e, file=sys.stderr)
-        return 1
-    preset_path = script_dir / filename
-    if not preset_path.exists():
-        print(f"Preset file not found: {preset_path}", file=sys.stderr)
+    if not config_path.exists():
+        print(f"Config file not found: {config_path}", file=sys.stderr)
         return 1
 
     try:
-        raw = preset_path.read_text()
+        raw = config_path.read_text()
         loaded = yaml.safe_load(raw)
     except Exception as e:
-        print(f"Error loading preset: {e}", file=sys.stderr)
+        print(f"Error loading config: {e}", file=sys.stderr)
         return 1
 
     try:
-        steps = pipeline.parse_pipeline(loaded)
+        metrics_list, environments = pipeline.parse_config(loaded)
+        env_config = pipeline.get_env_config(environments, args.env)
     except ValueError as e:
-        print(f"Invalid pipeline: {e}", file=sys.stderr)
+        print(f"Invalid config: {e}", file=sys.stderr)
         return 1
 
+    if args.verb not in VERB_REGISTRY:
+        print(f"Unknown verb: {args.verb}", file=sys.stderr)
+        return 1
+
+    handler = VERB_REGISTRY[args.verb]
+    assert callable(handler)
+    config_dir = config_path.resolve().parent
     run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    for step_name, verb, config in steps:
-        if verb not in VERB_REGISTRY:
-            print(f"Unknown verb: {verb}", file=sys.stderr)
-            return 1
-        handler = VERB_REGISTRY[verb]
-        assert callable(handler)
-        code = handler(config, script_dir, step_name, run_timestamp)
-        if code != 0:
-            return code
-    return 0
+    code = handler(
+        env_config, script_dir, config_dir, metrics_list, run_timestamp
+    )
+    return code
 
 
 if __name__ == "__main__":
