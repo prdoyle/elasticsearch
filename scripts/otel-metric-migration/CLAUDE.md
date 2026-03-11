@@ -11,13 +11,13 @@ This directory is **phase 1** of an OTel metric migration: a **read-only** repor
 
 ## Design: logic vs I/O and unit testing
 
-We separate **pure logic** from **I/O and side effects** so that business rules and branching can be **unit-tested to the greatest possible extent** without touching the network, filesystem, or browser.
+We separate **pure logic** from **I/O and side effects** so that business rules can be unit-tested without touching the network, filesystem, or browser.
 
-- **Pure logic** lives in dedicated modules (`core`, `report_builder`, `pipeline`, and the testable parts of `auth`). These functions take in-memory inputs (strings, dicts, lists) and return in-memory outputs. They do not read files, open sockets, or launch browsers. All such code is covered by unit tests in `tests/test_*.py` with no mocks of real services: we just call the functions with crafted data and assert on return values.
-- **I/O and side effects** are confined to thin wrappers or the main script: file read/write, HTTP calls, etc. The main orchestration code (`report_metric_references.run`, `process_cluster`) receives **injectable** dependencies (e.g. `get_credentials_fn`, `export_fn`, `collect_api_key_fn`) so that tests can supply fakes without doing real I/O. **collect_api_key_fn** is responsible for deciding whether to prompt: the default implementation `_collect_api_key_via_browser` checks `sys.stdin.isatty()` and returns `""` after printing a hint when not interactive; when interactive it opens the browser and prompts for a pasted key. There is no separate `interactive` parameter—the callable encapsulates that decision.
-- **Straight-line orchestration** (e.g. load file → parse → loop and dispatch) that is **intermingled with I/O** is not expected to be unit tested. We extract testable logic into pure functions and test those; the thin wiring in the main script either works or doesn’t and is left to manual or integration checks if needed. We keep orchestration **very simple with minimal conditionals** so that it either always works or never works; that way we don’t rely on unit-testing the I/O path to prove correctness.
-- **Behavioural change without unit test changes = test gap.** If a behavioural change does not necessitate unit test changes, treat that as a gap: add or adjust tests so that future changes to that behaviour will show up in the test suite. That way every behavioural change is manifest in pull requests. Exception: I/O and orchestration code are not unit tested; we keep them thin and linear so they either work or fail obviously.
-- **Result:** The vast majority of behavior—URL normalization, config parsing, scan logic, stop policy, credential validation, cache TTL, pipeline and preset-filename parsing, step output path construction—is covered by fast, deterministic unit tests. Only the thin I/O layers and integration-style flows are left to manual or integration testing.
+- **Pure logic** lives in `core`, `report_builder`, `pipeline`, and the testable parts of `auth`: in-memory in, in-memory out; no file/socket/browser access. All of it is covered by unit tests in `tests/test_*.py` with no mocks—call with crafted data, assert on return values.
+- **I/O and side effects** stay in thin wrappers and the main script. Orchestration (`report_metric_references.run`, `process_cluster`) uses **injectable** dependencies (`get_credentials_fn`, `export_fn`, `collect_api_key_fn`) so tests can supply fakes. **collect_api_key_fn** decides whether to prompt: `_collect_api_key_via_browser` checks `sys.stdin.isatty()`, returns `""` with a hint when non-interactive, and opens the browser for a pasted key when interactive (no separate `interactive` parameter).
+- **Orchestration** (load file → parse → loop and dispatch) is not unit tested. We extract testable logic into pure functions and test those. The wiring is kept simple with minimal conditionals so it either works or fails as a whole, which makes it easy to verify with manual or integration tests.
+- **Behavioural change without unit test changes = test gap.** Add or adjust tests so future changes to that behaviour show up in the suite; then every behavioural change is manifest in pull requests. Exception: I/O and orchestration (see above) are not unit tested.
+- **Result:** The vast majority of behaviour—URL normalization, config parsing, scan logic, stop policy, credential validation, cache TTL, pipeline and preset parsing, step output path—is covered by fast, deterministic unit tests. I/O and integration-style flows are left to manual or integration testing.
 
 | Module | Role | Pure (tested) | I/O (not unit tested) |
 |--------|------|----------------|------------------------|
@@ -51,9 +51,10 @@ For each cluster URL:
 
 ## Running and testing
 
-- **Do not run scripts for real to verify behavior.** Scripts in this directory issue HTTP requests to Kibana/Elasticsearch. Do not run them against real or active clusters to check that code works. Rely on the **automated test suite** (`pytest tests/ -v`) instead. Manual runs are for the operator when they intend to hit real clusters with appropriate config.
-- **Run:** From this directory: `omm <preset>.yaml` (e.g. `omm qa-report.yaml`) or `python report_metric_references.py --clusters ... --metrics ...` for the legacy CLI (see README for full options).
-- **Tests:** `pytest tests/ -v`. Tests use in-memory data only; no network, no browser, no real cache files. conftest.py adds this directory to `sys.path` so `import core`, `import auth`, etc. work.
+- **Agents must not run against real clusters to verify behavior.** Scripts issue HTTP requests to Kibana/Elasticsearch. Use `pytest tests/ -v` instead; manual runs are for operators hitting real clusters with appropriate config.
+  - Humans: the responsibility is still yours. Agents gonna agent. Test without network, or without VPN, or against QA. Use your judgement.
+- **Run:** `omm <preset>.yaml` (e.g. `omm qa-report`) or `python report_metric_references.py --clusters ... --metrics ...` (see README).
+- **Tests:** `pytest tests/ -v`; in-memory only, conftest.py adds this directory to `sys.path`.
 
 ## Conventions
 
