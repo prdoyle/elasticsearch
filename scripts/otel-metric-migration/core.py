@@ -66,18 +66,36 @@ def saved_object_view_url(cluster_url: str, object_type: str, object_id: str) ->
     return base + f"/api/saved_objects/{quoted_type}/{quoted_id}"
 
 
+# Max total snippet length; window is centered on first occurrence of the metric.
+_SNIPPET_MAX_LEN = 220
+_SNIPPET_CONTEXT = 80
+
+
 def _find_metrics_in_string(value: str, old_metrics: list[str]) -> list[tuple[str, str]]:
     """
     If value is a string, check for exact or substring matches of old_metrics.
-    Returns list of (matched_metric, snippet) where snippet is truncated value.
+    Returns list of (matched_metric, snippet) where snippet is a window around the
+    first occurrence of the metric. Ellipses are added only when text was elided.
     """
     if not isinstance(value, str) or not value:
         return []
     results = []
-    snippet = value[:200] + ("..." if len(value) > 200 else "")
     for metric in old_metrics:
-        if metric in value:
-            results.append((metric, snippet))
+        idx = value.find(metric)
+        if idx == -1:
+            continue
+        start = max(0, idx - _SNIPPET_CONTEXT)
+        end = min(len(value), idx + len(metric) + _SNIPPET_CONTEXT)
+        if end - start > _SNIPPET_MAX_LEN:
+            if idx - start > _SNIPPET_CONTEXT:
+                start = idx - _SNIPPET_CONTEXT
+            end = min(len(value), start + _SNIPPET_MAX_LEN)
+        snippet = value[start:end]
+        if start > 0:
+            snippet = "..." + snippet
+        if end < len(value):
+            snippet = snippet + "..."
+        results.append((metric, snippet))
     return results
 
 

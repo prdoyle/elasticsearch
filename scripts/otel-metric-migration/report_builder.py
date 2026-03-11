@@ -68,15 +68,20 @@ def objects_to_cluster_entry(
     cluster_url: str,
     objects: Iterable[dict[str, Any]],
     old_metrics: list[str],
+    metrics_config: list[dict[str, str]],
 ) -> dict[str, Any]:
     """
     Build a single cluster report entry from an iterable of saved-object dicts.
     Only objects that reference at least one old metric are included.
+    Each metric_reference includes new_metric from metrics_config for automation.
     """
+    old_to_new = {m["old"]: m["new"] for m in metrics_config}
     objects_with_refs = []
     for obj in objects:
         refs = core.scan_saved_object(obj, old_metrics)
         if refs:
+            for ref in refs:
+                ref["new_metric"] = old_to_new.get(ref["old_metric"], ref["old_metric"])
             obj_type = obj.get("type", "")
             obj_id = obj.get("id", "")
             entry = {

@@ -94,6 +94,53 @@ def test_scan_saved_object_multiple_metrics():
     assert metrics_found == {"system.cpu.usage", "system.memory.usage"}
 
 
+def test_scan_saved_object_snippet_contains_metric_when_match_after_200_chars():
+    """Snippet is a window around the first occurrence; metric after 200 chars still appears in snippet."""
+    long_prefix = "x" * 250
+    value = long_prefix + '{"field":"system.cpu.usage"}'
+    obj = {"type": "dashboard", "id": "d1", "attributes": {"visState": value}}
+    refs = core.scan_saved_object(obj, ["system.cpu.usage"])
+    assert len(refs) == 1
+    snippet = refs[0]["locations"][0]["snippet"]
+    assert "system.cpu.usage" in snippet
+    assert snippet.startswith("...")
+
+
+def test_scan_saved_object_snippet_no_ellipses_when_match_fully_in_window():
+    """When the match fits entirely in the snippet window, no ellipses are added."""
+    value = '{"field":"system.cpu.usage"}'
+    obj = {"type": "dashboard", "id": "d1", "attributes": {"visState": value}}
+    refs = core.scan_saved_object(obj, ["system.cpu.usage"])
+    assert len(refs) == 1
+    snippet = refs[0]["locations"][0]["snippet"]
+    assert "system.cpu.usage" in snippet
+    assert not snippet.startswith("...")
+    assert not snippet.endswith("...")
+
+
+def test_scan_saved_object_snippet_ellipses_when_truncated_at_start():
+    """When text is elided before the match, snippet has leading ellipsis."""
+    long_prefix = "a" * 100
+    value = long_prefix + '{"metric":"system.cpu.usage"}'
+    obj = {"type": "dashboard", "id": "d1", "attributes": {"visState": value}}
+    refs = core.scan_saved_object(obj, ["system.cpu.usage"])
+    assert len(refs) == 1
+    snippet = refs[0]["locations"][0]["snippet"]
+    assert "system.cpu.usage" in snippet
+    assert snippet.startswith("...")
+
+
+def test_scan_saved_object_snippet_ellipses_when_truncated_at_end():
+    """When text is elided after the match, snippet has trailing ellipsis."""
+    value = '{"metric":"system.cpu.usage"}' + "z" * 100
+    obj = {"type": "dashboard", "id": "d1", "attributes": {"visState": value}}
+    refs = core.scan_saved_object(obj, ["system.cpu.usage"])
+    assert len(refs) == 1
+    snippet = refs[0]["locations"][0]["snippet"]
+    assert "system.cpu.usage" in snippet
+    assert snippet.endswith("...")
+
+
 def test_scan_saved_object_no_match():
     obj = {"type": "dashboard", "id": "x", "attributes": {"title": "Other"}}
     assert core.scan_saved_object(obj, ["system.cpu.usage"]) == []

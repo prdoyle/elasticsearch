@@ -102,7 +102,10 @@ def test_parse_credentials_map_skip_non_string_values():
 
 
 def test_objects_to_cluster_entry_empty():
-    entry = report_builder.objects_to_cluster_entry("https://a.com", [], ["system.cpu.usage"])
+    metrics_config = [{"old": "system.cpu.usage", "new": "system.cpu.usage.new"}]
+    entry = report_builder.objects_to_cluster_entry(
+        "https://a.com", [], ["system.cpu.usage"], metrics_config
+    )
     assert entry["cluster"] == "https://a.com"
     assert entry["saved_objects"] == []
 
@@ -111,8 +114,9 @@ def test_objects_to_cluster_entry_one_object_no_refs():
     objects = [
         {"type": "dashboard", "id": "d1", "attributes": {"title": "Empty"}},
     ]
+    metrics_config = [{"old": "system.cpu.usage", "new": "system.cpu.usage.new"}]
     entry = report_builder.objects_to_cluster_entry(
-        "https://a.com", objects, ["system.cpu.usage"]
+        "https://a.com", objects, ["system.cpu.usage"], metrics_config
     )
     assert entry["cluster"] == "https://a.com"
     assert entry["saved_objects"] == []
@@ -129,8 +133,9 @@ def test_objects_to_cluster_entry_one_object_with_ref():
             },
         },
     ]
+    metrics_config = [{"old": "system.cpu.usage", "new": "system.cpu.usage.new"}]
     entry = report_builder.objects_to_cluster_entry(
-        "https://a.com", objects, ["system.cpu.usage"]
+        "https://a.com", objects, ["system.cpu.usage"], metrics_config
     )
     assert entry["cluster"] == "https://a.com"
     assert len(entry["saved_objects"]) == 1
@@ -139,6 +144,7 @@ def test_objects_to_cluster_entry_one_object_with_ref():
     assert entry["saved_objects"][0]["title"] == "CPU"
     assert entry["saved_objects"][0]["view_url"] == "https://a.com/api/saved_objects/dashboard/d1"
     assert entry["saved_objects"][0]["metric_references"][0]["old_metric"] == "system.cpu.usage"
+    assert entry["saved_objects"][0]["metric_references"][0]["new_metric"] == "system.cpu.usage.new"
 
 
 def test_objects_to_cluster_entry_two_objects_one_with_refs():
@@ -150,13 +156,15 @@ def test_objects_to_cluster_entry_two_objects_one_with_refs():
             "attributes": {"visState": '{"metric":"system.memory.usage"}'},
         },
     ]
+    metrics_config = [{"old": "system.memory.usage", "new": "system.memory.usage.new"}]
     entry = report_builder.objects_to_cluster_entry(
-        "https://a.com", objects, ["system.memory.usage"]
+        "https://a.com", objects, ["system.memory.usage"], metrics_config
     )
     assert len(entry["saved_objects"]) == 1
     assert entry["saved_objects"][0]["type"] == "visualization"
     assert entry["saved_objects"][0]["view_url"] == "https://a.com/api/saved_objects/visualization/v1"
     assert entry["saved_objects"][0]["metric_references"][0]["old_metric"] == "system.memory.usage"
+    assert entry["saved_objects"][0]["metric_references"][0]["new_metric"] == "system.memory.usage.new"
 
 
 def test_objects_to_cluster_entry_object_with_empty_id_omits_view_url():
@@ -167,8 +175,9 @@ def test_objects_to_cluster_entry_object_with_empty_id_omits_view_url():
             "attributes": {"title": "No id", "visState": '{"field":"system.cpu.usage"}'},
         },
     ]
+    metrics_config = [{"old": "system.cpu.usage", "new": "system.cpu.usage.new"}]
     entry = report_builder.objects_to_cluster_entry(
-        "https://a.com", objects, ["system.cpu.usage"]
+        "https://a.com", objects, ["system.cpu.usage"], metrics_config
     )
     assert len(entry["saved_objects"]) == 1
     assert "view_url" not in entry["saved_objects"][0]

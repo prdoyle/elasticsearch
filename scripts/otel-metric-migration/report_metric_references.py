@@ -99,6 +99,7 @@ def _save_credentials_to_file(api_keys_path: str | Path, cluster_url: str, api_k
 def process_cluster(
     cluster_url: str,
     old_metrics: list[str],
+    metrics_config: list[dict[str, str]],
     get_credentials_fn: Callable[[str], dict[str, Any]],
     export_fn: Callable[[str, dict[str, Any]], Any],
     api_keys_path: str | Path,
@@ -120,7 +121,9 @@ def process_cluster(
         creds = auth.get_credentials_from_api_key(api_key)
         try:
             objects = export_fn(cluster_url, creds)
-            entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
+            entry = report_builder.objects_to_cluster_entry(
+                cluster_url, objects, old_metrics, metrics_config
+            )
             url = core.normalize_kibana_url(cluster_url)
             credentials_map[url] = api_key
             _save_credentials_to_file(api_keys_path, cluster_url, api_key)
@@ -144,7 +147,9 @@ def process_cluster(
 
     try:
         objects = export_fn(cluster_url, creds)
-        entry = report_builder.objects_to_cluster_entry(cluster_url, objects, old_metrics)
+        entry = report_builder.objects_to_cluster_entry(
+            cluster_url, objects, old_metrics, metrics_config
+        )
         return entry, []
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code == 401:
@@ -186,6 +191,7 @@ def run(
         result = process_cluster(
             cluster_url,
             old_metrics,
+            metrics_config,
             get_creds,
             export,
             api_keys_path,

@@ -105,9 +105,11 @@ def test_process_cluster_401_user_pastes_key_second_export_succeeds(tmp_path):
 
     credentials_map = {}
 
+    metrics_config = [{"old": "system.cpu.usage", "new": "system.cpu.usage.new"}]
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         old_metrics,
+        metrics_config,
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -133,6 +135,7 @@ def test_process_cluster_401_user_skips_empty_key(tmp_path):
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
+        [{"old": "m1", "new": "m1.new"}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -158,6 +161,7 @@ def test_process_cluster_401_user_pastes_key_third_export_still_fails(tmp_path):
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
+        [{"old": "m1", "new": "m1.new"}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -183,6 +187,7 @@ def test_process_cluster_401_collect_api_key_returns_empty_returns_error(tmp_pat
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
+        [{"old": "m1", "new": "m1.new"}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -210,6 +215,7 @@ def test_process_cluster_401_pasted_key_success_writes_api_keys_file(tmp_path):
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
+        [{"old": "m1", "new": "m1.new"}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
@@ -240,6 +246,7 @@ def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_en
     entry, errs = report_metric_references.process_cluster(
         cluster_url,
         ["m1"],
+        [{"old": "m1", "new": "m1.new"}],
         get_credentials_fn,
         export_fn,
         api_keys_path=api_keys_path,
