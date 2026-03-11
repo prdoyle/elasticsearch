@@ -22,7 +22,29 @@ No I/O; all functions take and return in-memory data for testability.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any
+
+STEP_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def validate_step_name(step_name: str) -> None:
+    """
+    Validate that step_name is a non-empty string containing only letters, numbers,
+    underscore, and hyphen. Periods are forbidden to avoid path confusion (e.g. '..').
+    Raises ValueError with a clear message if invalid.
+    """
+    if not step_name or not isinstance(step_name, str):
+        raise ValueError(
+            "Step name must be non-empty and contain only letters, numbers, "
+            "underscore, and hyphen"
+        )
+    if not STEP_NAME_PATTERN.fullmatch(step_name):
+        raise ValueError(
+            "Step name must be non-empty and contain only letters, numbers, "
+            "underscore, and hyphen"
+        )
 
 
 def resolve_preset_filename(preset_file: str) -> str:
@@ -37,12 +59,22 @@ def resolve_preset_filename(preset_file: str) -> str:
     return preset_file
 
 
-def parse_pipeline(yaml_data: Any) -> list[tuple[str, dict[str, Any]]]:
+def step_output_dir(script_dir: Path, base: str, step_name: str) -> Path:
     """
-    Parse pipeline preset structure into a list of (verb, config) steps.
+    Return the path used for a step's output directory: script_dir / base / step_name.
+    No I/O; pure path construction for testability.
+    """
+    return script_dir / base / step_name
+
+
+def parse_pipeline(yaml_data: Any) -> list[tuple[str, str, dict[str, Any]]]:
+    """
+    Parse pipeline preset structure into a list of (step_name, verb, config) steps.
 
     Expects yaml_data to be a dict with key "steps" whose value is a list.
-    Each step must be a dict with exactly one key (the verb); the value must be a dict (the config).
+    Each step must be a dict with exactly one key (the step name); the value must be a dict
+    that contains "do" (the verb); the rest of the value is the verb's config.
+    Step names must be unique and valid (see validate_step_name).
     Raises ValueError if the structure is invalid.
     """
     if not isinstance(yaml_data, dict):
@@ -52,19 +84,36 @@ def parse_pipeline(yaml_data: Any) -> list[tuple[str, dict[str, Any]]]:
     steps_raw = yaml_data["steps"]
     if not isinstance(steps_raw, list):
         raise ValueError("pipeline 'steps' must be a list")
+    seen_names: set[str] = set()
     result = []
     for i, item in enumerate(steps_raw):
         if not isinstance(item, dict):
             raise ValueError(f"pipeline step at index {i} must be a dict")
         if len(item) != 1:
             raise ValueError(
-                f"pipeline step at index {i} must have exactly one key (the verb), got {len(item)}"
+                f"pipeline step at index {i} must have exactly one key (the step name), got {len(item)}"
             )
-        verb = next(iter(item.keys()))
-        config = item[verb]
-        if not isinstance(config, dict):
-            raise ValueError(f"pipeline step at index {i} verb '{verb}' value must be a dict")
-        result.append((verb, config))
+        step_name = next(iter(item.keys()))
+        validate_step_name(step_name)
+        if step_name in seen_names:
+            raise ValueError(f"duplicate step name '{step_name}' at index {i}")
+        seen_names.add(step_name)
+        value = item[step_name]
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"pipeline step at index {i} '{step_name}' value must be a dict"
+            )
+        if "do" not in value:
+            raise ValueError(
+                f"pipeline step at index {i} '{step_name}' must have a 'do' key (the verb)"
+            )
+        verb = value["do"]
+        if not isinstance(verb, str) or not verb:
+            raise ValueError(
+                f"pipeline step at index {i} '{step_name}' 'do' must be a non-empty string"
+            )
+        config = {k: v for k, v in value.items() if k != "do"}
+        result.append((step_name, verb, config))
     return result
 
 

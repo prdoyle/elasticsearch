@@ -32,12 +32,15 @@ import pipeline
 import report_metric_references
 
 
-def _report_handler(config: dict[str, object], script_dir: Path) -> int:
+def _report_handler(
+    config: dict[str, object], script_dir: Path, step_name: str
+) -> int:
     """Run the report verb: load clusters/metrics, credentials, call run()."""
     pipeline.validate_report_config(config)
     clusters_path = script_dir / str(config["clusters"])
     metrics_path = script_dir / str(config["metrics"])
-    output_dir = str(script_dir / str(config.get("output_dir", "out")))
+    base = str(config.get("output_dir", "out"))
+    output_dir = pipeline.step_output_dir(script_dir, base, step_name)
     api_keys_path = script_dir / "api-keys.json"
 
     try:
@@ -60,7 +63,7 @@ def _report_handler(config: dict[str, object], script_dir: Path) -> int:
     return report_metric_references.run(
         clusters=clusters,
         metrics_config=metrics_config,
-        output_dir=output_dir,
+        output_dir=str(output_dir),
         credentials_map=credentials_map,
         api_keys_path=api_keys_path,
     )
@@ -106,13 +109,13 @@ def main() -> int:
         print(f"Invalid pipeline: {e}", file=sys.stderr)
         return 1
 
-    for verb, config in steps:
+    for step_name, verb, config in steps:
         if verb not in VERB_REGISTRY:
             print(f"Unknown verb: {verb}", file=sys.stderr)
             return 1
         handler = VERB_REGISTRY[verb]
         assert callable(handler)
-        code = handler(config, script_dir)
+        code = handler(config, script_dir, step_name)
         if code != 0:
             return code
     return 0
