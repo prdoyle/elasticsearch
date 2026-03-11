@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import io
 import json
 import sys
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import requests
 
@@ -100,7 +101,7 @@ _STATUS_MAX_URL_LEN = 70
 _CLEAR_TO_EOL = "\x1b[K"
 
 
-def _write_status(message: str, stream: Any) -> None:
+def _write_status(message: str, stream: io.TextIOBase) -> None:
     """Overwrite current line with message (carriage return + message + clear to EOL). No newline.
     If message is empty, clears the line. No-op when stream is not a TTY."""
     if not (hasattr(stream, "isatty") and stream.isatty()):
@@ -114,7 +115,7 @@ def process_cluster(
     old_metrics: list[str],
     metrics_config: list[dict[str, Any]],
     get_credentials_fn: Callable[[str], dict[str, Any]],
-    export_fn: Callable[[str, dict[str, Any]], Any],
+    export_fn: Callable[[str, dict[str, Any]], Iterable[dict[str, Any]]],
     api_keys_path: str | Path,
     credentials_map: dict[str, str],
     collect_api_key_fn: Callable[[str], str] = _collect_api_key_via_browser,

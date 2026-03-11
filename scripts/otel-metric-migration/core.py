@@ -100,7 +100,7 @@ def _find_metrics_in_string(value: str, old_metrics: list[str]) -> list[tuple[st
 
 
 def _walk_and_find(
-    obj: Any,
+    obj: dict[str, Any] | list[Any] | str,
     path: str,
     old_metrics: list[str],
     results: list[tuple[str, str, str]],
@@ -183,7 +183,7 @@ def build_full_report(
     }
 
 
-def parse_metrics_config(config_json: list[Any]) -> list[dict[str, Any]]:
+def parse_metrics_config(config_json: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Parse and validate metrics config. Expects list of { "old": str, "new": { "name": str, "dimensions"?: dict } }.
     Returns the list with each "new" normalized to have "name" and "dimensions" (default {}); raises ValueError if invalid.

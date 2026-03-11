@@ -50,7 +50,7 @@ def parse_cluster_list(content: str) -> list[str]:
     return urls
 
 
-def parse_credentials_map(data: Any) -> dict[str, str]:
+def parse_credentials_map(data: dict[str, Any]) -> dict[str, str]:
     """
     Parse a decoded JSON object into a normalized map of Kibana URL -> API key.
     Raises ValueError if data is not a dict. Keys are normalized; non-string or empty values are skipped.
