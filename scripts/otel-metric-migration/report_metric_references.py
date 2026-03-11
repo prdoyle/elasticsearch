@@ -96,6 +96,19 @@ def _save_credentials_to_file(api_keys_path: str | Path, cluster_url: str, api_k
     path.write_text(json.dumps(data, indent=2))
 
 
+_STATUS_MAX_URL_LEN = 70
+_CLEAR_TO_EOL = "\x1b[K"
+
+
+def _write_status(message: str, stream: Any) -> None:
+    """Overwrite current line with message (carriage return + message + clear to EOL). No newline.
+    If message is empty, clears the line. No-op when stream is not a TTY."""
+    if not (hasattr(stream, "isatty") and stream.isatty()):
+        return
+    stream.write("\r" + message + _CLEAR_TO_EOL)
+    stream.flush()
+
+
 def process_cluster(
     cluster_url: str,
     old_metrics: list[str],
@@ -187,7 +200,16 @@ def run(
 
     results = []
     consecutive_failures = 0
-    for cluster_url in clusters:
+    total = len(clusters)
+    for i, cluster_url in enumerate(clusters, start=1):
+        display_url = (
+            cluster_url
+            if len(cluster_url) <= _STATUS_MAX_URL_LEN
+            else cluster_url[: _STATUS_MAX_URL_LEN - 3] + "..."
+        )
+        _write_status(
+            f"Processing cluster {i}/{total}: {display_url}", sys.stderr
+        )
         result = process_cluster(
             cluster_url,
             old_metrics,
@@ -206,6 +228,7 @@ def run(
             consecutive_failures += 1
             if consecutive_failures >= max_consecutive_failures:
                 break
+    _write_status("", sys.stderr)
 
     cluster_entries, all_errors, stopped_early = report_builder.apply_stop_policy(
         results, max_consecutive_failures
