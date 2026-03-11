@@ -94,7 +94,16 @@ def objects_to_cluster_entry(
             if view_url is not None:
                 entry["view_url"] = view_url
             objects_with_refs.append(entry)
-    return core.build_cluster_entry(cluster_url, objects_with_refs)
+    new_metrics = sorted(
+        set(
+            ref["new_metric"]
+            for obj in objects_with_refs
+            for ref in obj["metric_references"]
+        )
+    )
+    entry = core.build_cluster_entry(cluster_url, objects_with_refs)
+    entry["new_metrics"] = new_metrics
+    return entry
 
 
 def apply_stop_policy(
