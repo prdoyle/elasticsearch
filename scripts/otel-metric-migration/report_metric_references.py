@@ -57,11 +57,28 @@ def load_credentials_map(path: str) -> dict[str, str]:
     return report_builder.parse_credentials_map(data)
 
 
-def _open_api_key_page(cluster_url: str) -> None:
-    """Open the Kibana API key management page in the default browser."""
+def _api_key_page_url(cluster_url: str) -> str:
+    """Return the Kibana API key management page URL for the given cluster."""
     base_url = core.normalize_kibana_url(cluster_url).rstrip("/")
-    url = f"{base_url}/app/management/security/api_keys"
-    webbrowser.open(url)
+    return f"{base_url}/app/management/security/api_keys"
+
+
+def _collect_api_key_via_browser(api_key_page_url: str) -> str:
+    """Open the API key page in the browser, prompt for pasted key, return it or empty string.
+    When not in an interactive terminal, prints a hint and returns "" without prompting.
+    """
+    if not sys.stdin.isatty():
+        print(
+            "Re-run in an interactive terminal to paste an API key.",
+            file=sys.stderr,
+        )
+        return ""
+    webbrowser.open(api_key_page_url)
+    print(
+        "Create an API key in the opened browser, then paste it here (or press Enter to skip this cluster):",
+        file=sys.stderr,
+    )
+    return getpass.getpass("API key: ").strip()
 
 
 def _save_credentials_to_file(api_keys_path: str | Path, cluster_url: str, api_key: str) -> None:
@@ -86,28 +103,18 @@ def process_cluster(
     export_fn: Callable[[str, dict[str, Any]], Any],
     api_keys_path: str | Path,
     credentials_map: dict[str, str],
+    collect_api_key_fn: Callable[[str], str] = _collect_api_key_via_browser,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     """
     Export saved objects from one cluster, scan for old metrics, return (cluster_entry, errors).
     Returns None for cluster_entry on failure; errors list has one entry per failure.
-    On 401 or missing API key, may open API key page and prompt for pasted key; if provided and
+    On 401 or missing API key, may prompt for pasted key via collect_api_key_fn; if provided and
     export succeeds, key is saved to api_keys_path and credentials_map is updated.
     """
-    errors = []
+    api_key_page_url = _api_key_page_url(cluster_url)
 
     def _prompt_and_save_then_retry_export(retry_exception: Exception):
-        if not sys.stdin.isatty():
-            print(
-                "Re-run in an interactive terminal to paste an API key.",
-                file=sys.stderr,
-            )
-            return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_exception)}]
-        _open_api_key_page(cluster_url)
-        print(
-            "Create an API key in the opened browser, then paste it here (or press Enter to skip this cluster):",
-            file=sys.stderr,
-        )
-        pasted = getpass.getpass("API key: ").strip()
+        pasted = collect_api_key_fn(api_key_page_url)
         if not pasted:
             return None, [{"cluster": cluster_url, "phase": "export", "error": str(retry_exception)}]
         creds = auth.get_credentials_from_api_key(pasted)
@@ -124,18 +131,7 @@ def process_cluster(
     try:
         creds = get_credentials_fn(cluster_url)
     except RuntimeError as e:
-        if not sys.stdin.isatty():
-            print(
-                "Re-run in an interactive terminal to paste an API key.",
-                file=sys.stderr,
-            )
-            return None, [{"cluster": cluster_url, "phase": "auth", "error": str(e)}]
-        _open_api_key_page(cluster_url)
-        print(
-            "Create an API key in the opened browser, then paste it here (or press Enter to skip this cluster):",
-            file=sys.stderr,
-        )
-        pasted = getpass.getpass("API key: ").strip()
+        pasted = collect_api_key_fn(api_key_page_url)
         if not pasted:
             return None, [{"cluster": cluster_url, "phase": "auth", "error": str(e)}]
         url = core.normalize_kibana_url(cluster_url)
@@ -164,6 +160,7 @@ def run(
     output_dir: str,
     credentials_map: dict[str, str],
     api_keys_path: str | Path,
+    collect_api_key_fn: Callable[[str], str] = _collect_api_key_via_browser,
     max_consecutive_failures: int = 5,
 ) -> int:
     """
@@ -193,6 +190,7 @@ def run(
             export,
             api_keys_path,
             credentials_map,
+            collect_api_key_fn=collect_api_key_fn,
         )
         results.append(result)
         entry, errs = result

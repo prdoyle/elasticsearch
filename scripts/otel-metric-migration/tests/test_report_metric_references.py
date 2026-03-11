@@ -15,11 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Unit tests for report_metric_references: process_cluster 401 recovery, _open_api_key_page, _save_credentials_to_file."""
+"""Unit tests for report_metric_references: process_cluster 401 recovery, _api_key_page_url, _save_credentials_to_file."""
 
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import requests
 
@@ -44,19 +44,14 @@ def _sample_export_objects():
     ]
 
 
-# ---- _open_api_key_page ----
+# ---- _api_key_page_url ----
 
 
-def test_open_api_key_page_builds_correct_url_and_opens_browser():
-    with patch("report_metric_references.webbrowser.open") as mock_open:
-        report_metric_references._open_api_key_page("https://Host.com/app")
-        mock_open.assert_called_once()
-        call_url = mock_open.call_args[0][0]
-        assert call_url == "https://host.com/app/app/management/security/api_keys"
-    with patch("report_metric_references.webbrowser.open") as mock_open:
-        report_metric_references._open_api_key_page("https://foo.kb.region.aws.elastic-cloud.com")
-        call_url = mock_open.call_args[0][0]
-        assert call_url == "https://foo.kb.region.aws.elastic-cloud.com/app/management/security/api_keys"
+def test_api_key_page_url_builds_correct_url():
+    url = report_metric_references._api_key_page_url("https://Host.com/app")
+    assert url == "https://host.com/app/app/management/security/api_keys"
+    url = report_metric_references._api_key_page_url("https://foo.kb.region.aws.elastic-cloud.com")
+    assert url == "https://foo.kb.region.aws.elastic-cloud.com/app/management/security/api_keys"
 
 
 # ---- _save_credentials_to_file ----
@@ -109,17 +104,15 @@ def test_process_cluster_401_user_pastes_key_second_export_succeeds(tmp_path):
 
     credentials_map = {}
 
-    with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
-        "report_metric_references.getpass.getpass", return_value="pasted-key-123"
-    ), patch("report_metric_references.webbrowser.open"):
-        entry, errs = report_metric_references.process_cluster(
-            cluster_url,
-            old_metrics,
-            get_credentials_fn,
-            export_fn,
-            api_keys_path=api_keys_path,
-            credentials_map=credentials_map,
-        )
+    entry, errs = report_metric_references.process_cluster(
+        cluster_url,
+        old_metrics,
+        get_credentials_fn,
+        export_fn,
+        api_keys_path=api_keys_path,
+        credentials_map=credentials_map,
+        collect_api_key_fn=lambda url: "pasted-key-123",
+    )
 
     assert len(export_calls) == 2
     assert export_calls[1][1]["headers"]["Authorization"] == "ApiKey pasted-key-123"
@@ -136,17 +129,15 @@ def test_process_cluster_401_user_skips_empty_key(tmp_path):
     def export_fn(*args, **kwargs):
         raise _make_401_error()
 
-    with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
-        "report_metric_references.getpass.getpass", return_value=""
-    ), patch("report_metric_references.webbrowser.open"):
-        entry, errs = report_metric_references.process_cluster(
-            cluster_url,
-            ["m1"],
-            get_credentials_fn,
-            export_fn,
-            api_keys_path=api_keys_path,
-            credentials_map={},
-        )
+    entry, errs = report_metric_references.process_cluster(
+        cluster_url,
+        ["m1"],
+        get_credentials_fn,
+        export_fn,
+        api_keys_path=api_keys_path,
+        credentials_map={},
+        collect_api_key_fn=lambda url: "",
+    )
 
     assert entry is None
     assert len(errs) == 1
@@ -163,17 +154,15 @@ def test_process_cluster_401_user_pastes_key_third_export_still_fails(tmp_path):
         raise _make_401_error()
 
     credentials_map = {}
-    with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
-        "report_metric_references.getpass.getpass", return_value="bad-key"
-    ), patch("report_metric_references.webbrowser.open"):
-        entry, errs = report_metric_references.process_cluster(
-            cluster_url,
-            ["m1"],
-            get_credentials_fn,
-            export_fn,
-            api_keys_path=api_keys_path,
-            credentials_map=credentials_map,
-        )
+    entry, errs = report_metric_references.process_cluster(
+        cluster_url,
+        ["m1"],
+        get_credentials_fn,
+        export_fn,
+        api_keys_path=api_keys_path,
+        credentials_map=credentials_map,
+        collect_api_key_fn=lambda url: "bad-key",
+    )
 
     assert entry is None
     assert len(errs) == 1
@@ -181,7 +170,8 @@ def test_process_cluster_401_user_pastes_key_third_export_still_fails(tmp_path):
     assert credentials_map == {}
 
 
-def test_process_cluster_401_not_tty_skips_prompt(tmp_path):
+def test_process_cluster_401_collect_api_key_returns_empty_returns_error(tmp_path):
+    """When collect_api_key_fn returns empty string (e.g. user skipped or not interactive), we get an error."""
     cluster_url = "https://foo.kb.example.com"
     api_keys_path = tmp_path / "api-keys.json"
     get_credentials_fn = MagicMock(return_value={"headers": {}})
@@ -189,22 +179,16 @@ def test_process_cluster_401_not_tty_skips_prompt(tmp_path):
     def export_fn(*args, **kwargs):
         raise _make_401_error()
 
-    with patch("report_metric_references.sys.stdin.isatty", return_value=False), patch(
-        "report_metric_references.getpass.getpass"
-    ) as mock_getpass, patch(
-        "report_metric_references.webbrowser.open"
-    ) as mock_open:
-        entry, errs = report_metric_references.process_cluster(
-            cluster_url,
-            ["m1"],
-            get_credentials_fn,
-            export_fn,
-            api_keys_path=api_keys_path,
-            credentials_map={},
-        )
+    entry, errs = report_metric_references.process_cluster(
+        cluster_url,
+        ["m1"],
+        get_credentials_fn,
+        export_fn,
+        api_keys_path=api_keys_path,
+        credentials_map={},
+        collect_api_key_fn=lambda url: "",
+    )
 
-    mock_getpass.assert_not_called()
-    mock_open.assert_not_called()
     assert entry is None
     assert len(errs) == 1
 
@@ -222,17 +206,15 @@ def test_process_cluster_401_pasted_key_success_writes_api_keys_file(tmp_path):
         return _sample_export_objects()
 
     credentials_map = {}
-    with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
-        "report_metric_references.getpass.getpass", return_value="saved-key-456"
-    ), patch("report_metric_references.webbrowser.open"):
-        entry, errs = report_metric_references.process_cluster(
-            cluster_url,
-            ["m1"],
-            get_credentials_fn,
-            export_fn,
-            api_keys_path=api_keys_path,
-            credentials_map=credentials_map,
-        )
+    entry, errs = report_metric_references.process_cluster(
+        cluster_url,
+        ["m1"],
+        get_credentials_fn,
+        export_fn,
+        api_keys_path=api_keys_path,
+        credentials_map=credentials_map,
+        collect_api_key_fn=lambda url: "saved-key-456",
+    )
 
     assert entry is not None
     assert errs == []
@@ -254,17 +236,15 @@ def test_process_cluster_401_pasted_key_success_credentials_map_existing_adds_en
         return _sample_export_objects()
 
     credentials_map = {"https://other.com": "other-key"}
-    with patch("report_metric_references.sys.stdin.isatty", return_value=True), patch(
-        "report_metric_references.getpass.getpass", return_value="pasted-key"
-    ), patch("report_metric_references.webbrowser.open"):
-        entry, errs = report_metric_references.process_cluster(
-            cluster_url,
-            ["m1"],
-            get_credentials_fn,
-            export_fn,
-            api_keys_path=api_keys_path,
-            credentials_map=credentials_map,
-        )
+    entry, errs = report_metric_references.process_cluster(
+        cluster_url,
+        ["m1"],
+        get_credentials_fn,
+        export_fn,
+        api_keys_path=api_keys_path,
+        credentials_map=credentials_map,
+        collect_api_key_fn=lambda url: "pasted-key",
+    )
 
     assert entry is not None
     assert credentials_map["https://other.com"] == "other-key"
