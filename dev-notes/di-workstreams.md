@@ -49,7 +49,7 @@ Tests swap service implementations via `NodeServiceProvider` factory methods and
 
 ---
 
-## 2. Core Injector Design (Nalbind)
+## 2. Core Injector Design
 
 The injector itself — what's built, what's missing, and the design decisions that need to be locked down.
 

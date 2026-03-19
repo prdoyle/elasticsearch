@@ -59,9 +59,9 @@ This was fundamentally about plugin isolation and API stability, not internal DI
 
 All three options kept bumping into the same fundamental problem: the lack of a proper dependency injection system meant initialization ordering was manual, fragile, and couldn't express cross-plugin dependencies cleanly. This work helped crystallize the realization that ES needed real DI.
 
-## Phase 4: Accepting DI & Building "Nalbind" (Late 2024 → 2025)
+## Phase 4: Accepting DI & the custom injector (Late 2024 → 2025)
 
-The team accepted that DI — done right, tailored to ES — is the way forward. A custom injector called "Nalbind" was built.
+The team accepted that DI — done right, tailored to ES — is the way forward. Work began on a custom injector; the original 2024 proof-of-concept was referred to internally as "Nalbind." That name is historical only — ongoing and future work uses neutral terms (e.g. custom Elasticsearch DI, the injector) and does not use "Nalbind" as a product name.
 
 "DI Principles" (Ryan Ernst, updated through May 2025) codified the design philosophy:
 
@@ -88,7 +88,7 @@ The team accepted that DI — done right, tailored to ES — is the way forward.
 |-----------|--------|-------|
 | **@AutoInject scan** | Nearly ready to merge | Build-time annotation scanning to discover injectable components |
 | **Proxies** | Simplifying | Moving away from ASM; will proxy only a small fixed set of interfaces (e.g. List). Needed for late-constructed objects like RestController |
-| **Permissions** | Critical path, in progress | The key unsolved problem — Nalbind currently lets anything inject anything (same as Guice). Need a "simple, clean permission system that is sufficiently expressive" |
+| **Permissions** | Critical path, in progress | The key unsolved problem — the injector currently lets anything inject anything (same as Guice). Need a "simple, clean permission system that is sufficiently expressive" |
 | **Injecting from statics** | Planned | Scrape injectable values from static fields/annotations (e.g. Settings constants) |
 
 ### ON-week goals and work
@@ -117,7 +117,7 @@ Work was split:
 
 ## Summary of Latest Design
 
-The current direction is a custom, annotation-driven DI framework (Nalbind) that:
+The current direction is a custom, annotation-driven DI framework for Elasticsearch that:
 
 - Uses **build-time ASM scanning** to discover `@AutoInject`/`@Factory`/`@NamedComponent` annotated classes and pre-compute a manifest
 - **Validates all wiring before construction** — no runtime surprises
