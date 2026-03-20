@@ -118,7 +118,9 @@ The branches tell a story of progressive simplification:
 
 3. **Lineage 3** (try9/try8/try10, August) **moved the code into `server/`** and experimented with how much of the feature set to keep. The many reverts on try8 show the process of finding the right minimal set.
 
-4. **`di/squeeze`** (current branch) represents the final result: the injector lives in `server/.../injection/`, with only `MethodHandleSpec` and `ExistingInstanceSpec` (no `AliasSpec`, `AmbiguousSpec`, etc.), only `InstantiateStep` (no list proxy steps, no rollup step), no proxy pool, no custom exceptions, and no AutoInjectable scanning.
+4. **Main branch** represents the merge target: the injector lives in `server/.../injection/`, initially with only `MethodHandleSpec` and `ExistingInstanceSpec`, only `InstantiateStep`, no proxy pool, and no custom exceptions.
+
+5. **Post-nalbind branches** continued the injection work under different names, refining the API and exploring additional features. These branches are relevant because they established the naming conventions used when re-introducing features.
 
 ### Features removed during simplification
 
@@ -129,19 +131,27 @@ These features existed in the prototypes but were removed before merging:
 | `ProxyBytecodeGenerator` / invokedynamic proxies | Lineage 1 | Lineage 2 rewrite |
 | `ObjectGraph` (separate from Injector) | Lineage 1 | Lineage 2 rewrite |
 | `ClassFinder` (runtime classpath scanning) | Lineage 1 | Lineage 2 rewrite |
-| `AliasSpec`, `AmbiguousSpec`, `UnambiguousSpec` | Lineages 1, 2, 3 | di/squeeze |
-| `ListProxyCreateStep`, `ListProxyResolveStep` | Lineages 2, 3 | di/squeeze |
-| `RollUpStep`, `InstanceSupplyingStep` | Lineages 2, 3 | di/squeeze |
-| `ProxyPool` | Lineages 2, 3 | di/squeeze |
+| `AliasSpec`, `AmbiguousSpec`, `UnambiguousSpec` | Lineages 1, 2, 3 | main |
+| `ListProxyCreateStep`, `ListProxyResolveStep` | Lineages 2, 3 | main |
+| `RollUpStep`, `InstanceSupplyingStep` | Lineages 2, 3 | main |
+| `ProxyPool` | Lineages 2, 3 | main |
 | `@AutoInjectable`, `@InjectableSingleton`, `@Injected` | Various | Progressive removal |
 | `@InjectableTo` | try3 only | Not carried forward |
-| `InjectionModifiers` | Lineages 2, 3 | di/squeeze |
-| Custom exception types | Lineages 2, 3 | di/squeeze |
-| `AutoInjectionScanner` | Most branches | di/squeeze (for now) |
-| `SeedSpec` | Lineage 3 | di/squeeze |
-| ActionModule / RestHandler integration | try1–try3, try6, try7, try8 | di/squeeze (for now) |
+| `InjectionModifiers` | Lineages 2, 3 | main |
+| Custom exception types | Lineages 2, 3 | main |
+| `AutoInjectionScanner` | Most branches | Initial merge (for now) |
+| `SeedSpec` | Lineage 3 | main |
+| ActionModule / RestHandler integration | try1–try3, try6, try7, try8 | Initial merge (for now) |
 
-Many of these features are expected to be re-introduced as the DI migration progresses — they were removed to keep the initial merge small, not because they were wrong.
+Many of these features are expected to be re-introduced as the DI migration progresses — they were removed to keep the initial merge small, not because they were wrong. The post-nalbind branches (see below) established the updated naming for when they are brought back:
+
+| Feature | Prototype Name | Updated Name |
+|---------|---------------|--------------|
+| Supertype-to-subtype redirection | `AliasSpec` | `SubtypeSpec` |
+| Parameter modifier flags | `InjectionModifiers` | `ParameterModifier` |
+| Supertype rollup step | `RollUpStep` | `RollupStep` |
+| List proxy creation step | `ListProxyCreateStep` | `CreateListProxyStep` |
+| List proxy resolution step | `ListProxyResolveStep` | `ResolveListProxyStep` |
 
 ---
 
@@ -221,6 +231,28 @@ Terms and types that appear across the prototype branches.
 
 - **`ProxyBytecodeGenerator` / `ProxyBytecodeGeneratorImpl`** — (Lineage 1) Generated proxy classes via ASM bytecode generation. The invokedynamic-based approach that benchmarked at 2719M calls/sec. Replaced by the simpler `AbstractList`-based proxy approach in Lineage 2.
 
-- **`AutoInjectionScanner`** — Build-time ASM scanner that discovers `@AutoInjectable` classes on the classpath and produces a manifest. Companion to the existing `NamedComponentScanner`. Present on most branches; removed from di/squeeze for now.
+- **`AutoInjectionScanner`** — Build-time ASM scanner that discovers `@AutoInjectable` classes on the classpath and produces a manifest. Companion to the existing `NamedComponentScanner`. Present on most branches; not on main.
 
-- **Custom exceptions** — `CyclicDependencyException`, `InjectionConfigurationException`, `InjectionExecutionException`, `UnresolvedProxyException`. Replaced by generic `IllegalStateException` in the current codebase.
+- **Custom exceptions** — `CyclicDependencyException`, `InjectionConfigurationException`, `InjectionExecutionException`, `UnresolvedProxyException`. Removed during simplification for the initial merge; replaced by generic `IllegalStateException`.
+
+---
+
+## Post-Nalbind Branches
+
+After the nalbind-named branches, the injection work continued under different names. These branches refined the API naming and explored additional features:
+
+| Branch | Key Contribution |
+|--------|-----------------|
+| `injector2` | Moved injector from `libs/nalbind/` to `libs/injection/`; renamed package to `org.elasticsearch.injection`; kept `AliasSpec` naming |
+| `new-injector` | Minimal injector in `server/.../injection/`; stripped to MethodHandleSpec + ExistingInstanceSpec only (precursor to what was merged to main) |
+| `try1-new-injector` | Like `injector2` but in `libs/injection/`; has full spec hierarchy |
+| `inject-proxies` | **Key naming evolution**: `AliasSpec` → `SubtypeSpec`, `InjectionModifiers` → `ParameterModifier`, `RollUpStep` → `RollupStep`; added `@Proxy` annotation and instance proxy steps (`CreateInstanceProxyStep`, `ResolveInstanceProxyStep`) |
+| `rest-injection` | Extends `inject-proxies`; refined list proxies (`CreateListProxyStep`, `ResolveListProxyStep`); brought back `@Actual` for lists; added factory methods, lambda meta factory, named writeables support |
+| `try1-rest-injection` | Same direction as `rest-injection` |
+| `di/spacetime` | Ryan Ernst's ON-week branch; minimal injector in `server/`, same base as what was merged to main |
+| `di-elasticsearch` | Same structure as `di/spacetime` |
+
+### Remote-only branches
+
+- `remotes/rjernst/di/spacetime`, `remotes/rjernst/di/spacetime2`, `remotes/rjernst/di/squeeze`
+- `remotes/origin/inject-proxies`, `remotes/origin/inject-listeners`
