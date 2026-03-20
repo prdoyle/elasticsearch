@@ -9,11 +9,19 @@
 
 package org.elasticsearch.injection;
 
+import org.elasticsearch.injection.api.CyclicDependencyException;
+import org.elasticsearch.injection.api.InjectionConfigurationException;
+import org.elasticsearch.injection.spec.AmbiguousSpec;
 import org.elasticsearch.injection.spec.ExistingInstanceSpec;
 import org.elasticsearch.injection.spec.InjectionSpec;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
+import org.elasticsearch.injection.spec.ParameterSpec;
+import org.elasticsearch.injection.spec.SubtypeSpec;
+import org.elasticsearch.injection.step.CreateListProxyStep;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.injection.step.InstantiateStep;
+import org.elasticsearch.injection.step.ResolveListProxyStep;
+import org.elasticsearch.injection.step.RollupStep;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
@@ -40,6 +48,7 @@ final class Planner {
     final Set<InjectionSpec> startedPlanning;
     final Set<InjectionSpec> finishedPlanning;
     final Set<Class<?>> alreadyProxied;
+    final List<String> dependencyPath; // For cycle reporting
 
     /**
      * @param specsByClass an {@link InjectionSpec} indicating how each class should be injected
@@ -54,6 +63,7 @@ final class Planner {
         this.startedPlanning = new HashSet<>();
         this.finishedPlanning = new HashSet<>();
         this.alreadyProxied = new HashSet<>();
+        this.dependencyPath = new ArrayList<>();
     }
 
     /**
@@ -73,6 +83,7 @@ final class Planner {
         for (Class<?> c : requiredTypes) {
             planForClass(c, 0);
         }
+        planProxyResolution();
         return plan;
     }
 
@@ -85,7 +96,7 @@ final class Planner {
     private void planForClass(Class<?> requestedClass, int depth) {
         InjectionSpec spec = specsByClass.get(requestedClass);
         if (spec == null) {
-            throw new IllegalStateException("Cannot instantiate " + requestedClass + ": no specification provided");
+            throw new InjectionConfigurationException("Cannot instantiate " + requestedClass + ": no specification provided");
         }
         planForSpec(spec, depth);
     }
@@ -98,24 +109,110 @@ final class Planner {
 
         logger.trace("{}Planning for {}", indent(depth), spec);
         if (startedPlanning.add(spec) == false) {
-            // TODO: Better cycle detection and reporting. Use SCCs
-            throw new IllegalStateException("Cyclic dependency involving " + spec);
+            List<String> cycle = new ArrayList<>(dependencyPath);
+            cycle.add(spec.requestedType().getSimpleName());
+            throw new CyclicDependencyException("Cyclic dependency involving " + spec.requestedType().getSimpleName(), cycle);
         }
+        dependencyPath.add(spec.requestedType().getSimpleName());
 
-        if (spec instanceof MethodHandleSpec m) {
-            for (var p : m.parameters()) {
+        try {
+            if (spec instanceof MethodHandleSpec m) {
+                planForMethodHandleSpec(m, depth);
+            } else if (spec instanceof ExistingInstanceSpec e) {
+                logger.trace("{}- Plan {}", indent(depth), e);
+                // Nothing to do. The injector will already have the required object.
+            } else if (spec instanceof SubtypeSpec s) {
+                planForSubtypeSpec(s, depth);
+            } else if (spec instanceof AmbiguousSpec a) {
+                planForAmbiguousSpec(a, depth);
+            } else {
+                throw new AssertionError("Unexpected injection spec: " + spec);
+            }
+
+            finishedPlanning.add(spec);
+        } finally {
+            dependencyPath.remove(dependencyPath.size() - 1);
+        }
+    }
+
+    private void planForMethodHandleSpec(MethodHandleSpec m, int depth) {
+        for (var p : m.parameters()) {
+            if (p.isList()) {
+                planForListParameter(p, depth + 1);
+            } else {
                 logger.trace("{}- Recursing into {} for actual parameter {}", indent(depth), p.injectableType(), p);
                 planForClass(p.injectableType(), depth + 1);
             }
-            addStep(new InstantiateStep(m), depth);
-        } else if (spec instanceof ExistingInstanceSpec e) {
-            logger.trace("{}- Plan {}", indent(depth), e);
-            // Nothing to do. The injector will already have the required object.
-        } else {
-            throw new AssertionError("Unexpected injection spec: " + spec);
         }
+        addStep(new InstantiateStep(m), depth);
+    }
 
-        finishedPlanning.add(spec);
+    private void planForListParameter(ParameterSpec p, int depth) {
+        Class<?> elementType = p.injectableType();
+        if (p.canBeProxied()) {
+            // Create a proxy list if we haven't already
+            if (alreadyProxied.add(elementType)) {
+                logger.trace("{}- Creating list proxy for {}", indent(depth), elementType.getSimpleName());
+                addStep(new CreateListProxyStep(elementType), depth);
+            }
+        } else {
+            // @Actual list: must have all instances ready now
+            logger.trace("{}- Planning actual list of {}", indent(depth), elementType.getSimpleName());
+            planAllCandidatesOf(elementType, depth);
+            // Ensure the proxy is created and resolved
+            if (alreadyProxied.add(elementType)) {
+                addStep(new CreateListProxyStep(elementType), depth);
+            }
+            addStep(new ResolveListProxyStep(elementType), depth);
+        }
+    }
+
+    private void planForSubtypeSpec(SubtypeSpec s, int depth) {
+        logger.trace("{}- Subtype redirect: {} -> {}", indent(depth), s.requestedType().getSimpleName(), s.subtype().getSimpleName());
+        planForClass(s.subtype(), depth + 1);
+        addStep(new RollupStep(s.subtype(), s.requestedType()), depth);
+    }
+
+    private void planForAmbiguousSpec(AmbiguousSpec a, int depth) {
+        // Plan all candidates — their instances will be collected into a list
+        logger.trace("{}- Planning ambiguous spec for {}", indent(depth), a.requestedType().getSimpleName());
+        a.candidates().forEach(candidate -> planForSpec(candidate, depth + 1));
+    }
+
+    /**
+     * Plans all candidates that can provide instances of the given element type.
+     */
+    private void planAllCandidatesOf(Class<?> elementType, int depth) {
+        InjectionSpec spec = specsByClass.get(elementType);
+        if (spec == null) {
+            return;
+        }
+        if (spec instanceof AmbiguousSpec a) {
+            a.candidates().forEach(candidate -> planForSpec(candidate, depth));
+        } else {
+            planForSpec(spec, depth);
+        }
+    }
+
+    /**
+     * Emit {@link ResolveListProxyStep} for any proxies that haven't been resolved yet.
+     * Before resolving, plan the spec for each proxied type so that rollup steps are emitted.
+     */
+    private void planProxyResolution() {
+        for (Class<?> proxiedType : alreadyProxied) {
+            // Check if we already planned a resolution for this type
+            boolean alreadyResolved = plan.stream().anyMatch(
+                step -> step instanceof ResolveListProxyStep r && r.elementType() == proxiedType
+            );
+            if (alreadyResolved == false) {
+                // Plan the spec for this type (e.g. SubtypeSpec will emit RollupSteps)
+                InjectionSpec spec = specsByClass.get(proxiedType);
+                if (spec != null) {
+                    planForSpec(spec, 0);
+                }
+                plan.add(new ResolveListProxyStep(proxiedType));
+            }
+        }
     }
 
     private void addStep(InjectionStep newStep, int depth) {

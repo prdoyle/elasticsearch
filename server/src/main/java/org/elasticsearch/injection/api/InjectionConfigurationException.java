@@ -7,6 +7,18 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-package org.elasticsearch.injection.step;
+package org.elasticsearch.injection.api;
 
-public sealed interface InjectionStep permits CreateListProxyStep, InstantiateStep, ResolveListProxyStep, RollupStep {}
+/**
+ * Thrown when the injector detects a problem during configuration or planning,
+ * before any constructor calls are made.
+ */
+public class InjectionConfigurationException extends IllegalStateException {
+    public InjectionConfigurationException(String message) {
+        super(message);
+    }
+
+    public InjectionConfigurationException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}

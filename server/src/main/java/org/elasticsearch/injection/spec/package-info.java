@@ -10,7 +10,17 @@
 /**
  * Objects that describe the means by which an object instance is created for (or associated with) some given type.
  * <p>
- * The hierarchy is rooted at {@link org.elasticsearch.injection.spec.InjectionSpec}.
+ * The hierarchy is rooted at {@link org.elasticsearch.injection.spec.InjectionSpec}:
+ * <ul>
+ *     <li>{@link org.elasticsearch.injection.spec.UnambiguousSpec} — a spec that unambiguously describes one way to produce an instance:
+ *         <ul>
+ *             <li>{@link org.elasticsearch.injection.spec.MethodHandleSpec} — instantiate via a {@link java.lang.invoke.MethodHandle}</li>
+ *             <li>{@link org.elasticsearch.injection.spec.ExistingInstanceSpec} — use an already-existing instance</li>
+ *             <li>{@link org.elasticsearch.injection.spec.SubtypeSpec} — redirect to a subtype's spec</li>
+ *         </ul>
+ *     </li>
+ *     <li>{@link org.elasticsearch.injection.spec.AmbiguousSpec} — multiple implementations discovered (ok for lists, error for single injection)</li>
+ * </ul>
  * <p>
  * Differs from {@link org.elasticsearch.injection.step.InjectionStep InjectionStep} in that:
  *

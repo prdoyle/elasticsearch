@@ -9,4 +9,11 @@
 
 package org.elasticsearch.injection.step;
 
-public sealed interface InjectionStep permits CreateListProxyStep, InstantiateStep, ResolveListProxyStep, RollupStep {}
+/**
+ * Creates a proxy {@link java.util.List} for the given element type.
+ * The proxy is an empty list placeholder that will be populated later
+ * by a corresponding {@link ResolveListProxyStep}.
+ *
+ * @param elementType the type of element in the list
+ */
+public record CreateListProxyStep(Class<?> elementType) implements InjectionStep {}

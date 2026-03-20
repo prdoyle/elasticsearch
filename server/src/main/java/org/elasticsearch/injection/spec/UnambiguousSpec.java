@@ -7,6 +7,11 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-package org.elasticsearch.injection.step;
+package org.elasticsearch.injection.spec;
 
-public sealed interface InjectionStep permits CreateListProxyStep, InstantiateStep, ResolveListProxyStep, RollupStep {}
+/**
+ * An {@link InjectionSpec} that unambiguously describes how to produce an instance of a type.
+ * <p>
+ * Contrast with {@link AmbiguousSpec}, which represents a conflict between multiple candidates.
+ */
+public sealed interface UnambiguousSpec extends InjectionSpec permits SubtypeSpec, ExistingInstanceSpec, MethodHandleSpec {}

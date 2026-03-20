@@ -10,10 +10,13 @@
 package org.elasticsearch.injection;
 
 import org.elasticsearch.injection.api.Inject;
+import org.elasticsearch.injection.api.InjectionConfigurationException;
+import org.elasticsearch.injection.spec.AmbiguousSpec;
 import org.elasticsearch.injection.spec.ExistingInstanceSpec;
 import org.elasticsearch.injection.spec.InjectionSpec;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
+import org.elasticsearch.injection.spec.SubtypeSpec;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -21,6 +24,7 @@ import org.elasticsearch.logging.Logger;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.HashSet;
@@ -51,13 +55,19 @@ public final class Injector {
      * The specifications supplied by the user, as opposed to those inferred by the injector.
      */
     private final Map<Class<?>, InjectionSpec> seedSpecs;
+    private final MethodHandles.Lookup lookup;
 
-    Injector(Map<Class<?>, InjectionSpec> seedSpecs) {
+    Injector(Map<Class<?>, InjectionSpec> seedSpecs, MethodHandles.Lookup lookup) {
         this.seedSpecs = seedSpecs;
+        this.lookup = lookup;
     }
 
     public static Injector create() {
-        return new Injector(new LinkedHashMap<>());
+        return create(MethodHandles.publicLookup());
+    }
+
+    public static Injector create(MethodHandles.Lookup lookup) {
+        return new Injector(new LinkedHashMap<>(), lookup);
     }
 
     /**
@@ -70,7 +80,7 @@ public final class Injector {
      *         This method
      *     </li>
      *     <li>
-     *         The parameter passed to {@link #inject}
+     *         The parameter passed to {@link #inject(Collection)}
      *     </li>
      *     <li>
      *         A constructor parameter of some other class being instantiated,
@@ -81,7 +91,7 @@ public final class Injector {
      * @return <code>this</code>
      */
     public Injector addClass(Class<?> classToProcess) {
-        MethodHandleSpec methodHandleSpec = methodHandleSpecFor(classToProcess);
+        MethodHandleSpec methodHandleSpec = methodHandleSpecFor(classToProcess, lookup);
         var existing = seedSpecs.put(classToProcess, methodHandleSpec);
         if (existing != null) {
             throw new IllegalArgumentException("class " + classToProcess.getSimpleName() + " has already been added");
@@ -130,6 +140,43 @@ public final class Injector {
     }
 
     /**
+     * Reflectively decomposes a {@link Record} and registers each component as an existing instance.
+     * This is useful for registering a configuration record whose components are injectable objects.
+     */
+    @SuppressWarnings("unchecked")
+    public Injector addRecordContents(Record record) {
+        for (var component : record.getClass().getRecordComponents()) {
+            try {
+                Object value = component.getAccessor().invoke(record);
+                if (value != null) {
+                    // We know value is an instance of component.getType() because the accessor returned it
+                    seedSpecs.put(component.getType(), new ExistingInstanceSpec(component.getType(), value));
+                }
+            } catch (ReflectiveOperationException e) {
+                throw new InjectionConfigurationException("Failed to read record component " + component.getName(), e);
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Convenience method: performs injection and returns no results.
+     * Useful when all the desired effects are side effects of constructor calls.
+     */
+    public void inject() {
+        doInjection();
+    }
+
+    /**
+     * Convenience method: performs injection and returns the single instance of the given type.
+     */
+    public <T> T inject(Class<T> resultType) {
+        ensureClassIsSpecified(resultType);
+        PlanInterpreter i = doInjection();
+        return i.theInstanceOf(resultType);
+    }
+
+    /**
      * Main entry point. Causes objects to be constructed.
      * @return {@link Map} whose keys are all the requested <code>resultTypes</code> and whose values are all the instances of those types.
      */
@@ -147,14 +194,15 @@ public final class Injector {
 
     private PlanInterpreter doInjection() {
         logger.debug("Starting injection");
-        Map<Class<?>, InjectionSpec> specMap = specClosure(seedSpecs);
+        Map<Class<?>, InjectionSpec> specMap = specClosure(seedSpecs, lookup);
         Map<Class<?>, Object> existingInstances = new LinkedHashMap<>();
         specMap.values().forEach((spec) -> {
             if (spec instanceof ExistingInstanceSpec e) {
                 existingInstances.put(e.requestedType(), e.instance());
             }
         });
-        PlanInterpreter interpreter = new PlanInterpreter(existingInstances);
+        ProxyPool proxyPool = new ProxyPool();
+        PlanInterpreter interpreter = new PlanInterpreter(existingInstances, proxyPool);
         interpreter.executePlan(injectionPlan(seedSpecs.keySet(), specMap));
         logger.debug("Done injection");
         return interpreter;
@@ -172,7 +220,7 @@ public final class Injector {
      * @param seedMap the injections the user explicitly asked for
      * @return an {@link InjectionSpec} for every class the injector is capable of injecting.
      */
-    private static Map<Class<?>, InjectionSpec> specClosure(Map<Class<?>, InjectionSpec> seedMap) {
+    private static Map<Class<?>, InjectionSpec> specClosure(Map<Class<?>, InjectionSpec> seedMap, MethodHandles.Lookup lookup) {
         assert seedMapIsValid(seedMap);
 
         // For convenience, we pretend there's a gigantic method out there that takes
@@ -199,6 +247,7 @@ public final class Injector {
             if (spec instanceof ExistingInstanceSpec) {
                 // simple!
                 result.put(c, spec);
+                registerSupertypes(c, result);
                 continue;
             }
 
@@ -206,7 +255,7 @@ public final class Injector {
             MethodHandleSpec methodHandleSpec;
             if (spec == null) {
                 // The user didn't specify this class; we must infer it now
-                spec = methodHandleSpec = methodHandleSpecFor(c);
+                spec = methodHandleSpec = methodHandleSpecFor(c, lookup);
             } else if (spec instanceof MethodHandleSpec m) {
                 methodHandleSpec = m;
             } else {
@@ -220,6 +269,7 @@ public final class Injector {
             }
 
             registerSpec(spec, result);
+            registerSupertypes(c, result);
         }
 
         if (logger.isTraceEnabled()) {
@@ -228,17 +278,23 @@ public final class Injector {
         return result;
     }
 
-    private static MethodHandleSpec methodHandleSpecFor(Class<?> c) {
+    private static MethodHandleSpec methodHandleSpecFor(Class<?> c, MethodHandles.Lookup lookup) {
         Constructor<?> constructor = getSuitableConstructorIfAny(c);
         if (constructor == null) {
-            throw new IllegalStateException("No suitable constructor for " + c);
+            throw new InjectionConfigurationException("No suitable constructor for " + c);
         }
 
         MethodHandle ctorHandle;
         try {
-            ctorHandle = lookup().unreflectConstructor(constructor);
+            ctorHandle = lookup.unreflectConstructor(constructor);
         } catch (IllegalAccessException e) {
-            throw new IllegalStateException(e);
+            // Fallback: try setAccessible for non-public constructors
+            try {
+                constructor.setAccessible(true);
+                ctorHandle = lookup.unreflectConstructor(constructor);
+            } catch (IllegalAccessException | SecurityException e2) {
+                throw new InjectionConfigurationException("Cannot access constructor for " + c, e);
+            }
         }
 
         List<ParameterSpec> parameters = Stream.of(constructor.getParameters()).map(ParameterSpec::from).toList();
@@ -265,7 +321,7 @@ public final class Injector {
     }
 
     private static Constructor<?> getSuitableConstructorIfAny(Class<?> type) {
-        var constructors = Stream.of(type.getConstructors()).filter(not(Constructor::isSynthetic)).toList();
+        var constructors = Stream.of(type.getDeclaredConstructors()).filter(not(Constructor::isSynthetic)).toList();
         if (constructors.size() == 1) {
             return constructors.get(0);
         }
@@ -283,7 +339,26 @@ public final class Injector {
         if (existing == null || existing.equals(spec)) {
             logger.trace("Register spec: {}", spec);
         } else {
-            throw new IllegalStateException("Ambiguous specifications for " + requestedType + ": " + existing + " and " + spec);
+            // Create an AmbiguousSpec wrapping both the existing and new spec
+            var ambiguous = new AmbiguousSpec(requestedType, existing, spec);
+            specsByClass.put(requestedType, ambiguous);
+            logger.trace("Register ambiguous spec for {}: {} and {}", requestedType.getSimpleName(), existing, spec);
+        }
+    }
+
+    /**
+     * Registers {@link SubtypeSpec}s for all superinterfaces and abstract superclasses of the given class.
+     */
+    private static void registerSupertypes(Class<?> c, Map<Class<?>, InjectionSpec> specsByClass) {
+        for (Class<?> iface : c.getInterfaces()) {
+            registerSpec(new SubtypeSpec(iface, c), specsByClass);
+            // Recursively register superinterfaces of this interface
+            registerSupertypes(iface, specsByClass);
+        }
+        Class<?> superclass = c.getSuperclass();
+        if (superclass != null && superclass != Object.class && Modifier.isAbstract(superclass.getModifiers())) {
+            registerSpec(new SubtypeSpec(superclass, c), specsByClass);
+            registerSupertypes(superclass, specsByClass);
         }
     }
 
@@ -301,15 +376,6 @@ public final class Injector {
             logger.debug("Injection plan: {}", plan.stream().map(Object::toString).collect(joining("\n\t", "\n\t", "")));
         }
         return plan;
-    }
-
-    /**
-     * <em>Evolution note</em>: there may be cases in the where we allow the user to
-     * supply a {@link java.lang.invoke.MethodHandles.Lookup} for convenience,
-     * so that they aren't required to make things public just to participate in injection.
-     */
-    private static MethodHandles.Lookup lookup() {
-        return MethodHandles.publicLookup();
     }
 
 }

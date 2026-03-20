@@ -11,6 +11,14 @@
  * Objects that describe one operation to be performed by the <code>PlanInterpreter</code>.
  * Injection is achieved by executing the steps in order.
  * <p>
+ * Step types:
+ * <ul>
+ *     <li>{@link org.elasticsearch.injection.step.InstantiateStep} — construct a new object via a MethodHandle</li>
+ *     <li>{@link org.elasticsearch.injection.step.RollupStep} — make subtype instances available as a supertype</li>
+ *     <li>{@link org.elasticsearch.injection.step.CreateListProxyStep} — create a proxy list placeholder</li>
+ *     <li>{@link org.elasticsearch.injection.step.ResolveListProxyStep} — populate a proxy list with actual instances</li>
+ * </ul>
+ * <p>
  * See <code>PlanInterpreter</code> for more details on the execution model.
  */
 package org.elasticsearch.injection.step;

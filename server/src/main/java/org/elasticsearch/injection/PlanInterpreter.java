@@ -12,11 +12,16 @@ package org.elasticsearch.injection;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
+import org.elasticsearch.injection.step.CreateListProxyStep;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.injection.step.InstantiateStep;
+import org.elasticsearch.injection.step.ResolveListProxyStep;
+import org.elasticsearch.injection.step.RollupStep;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,17 +37,19 @@ import java.util.Map;
  *
  * <p>
  * <strong>Execution model</strong>:
- * The state of the injector during injection comprises a map from classes to objects.
+ * The state of the injector during injection comprises a map from classes to lists of objects.
  * Before any steps execute, the map is pre-populated by object instances added via
- * {@link Injector#addInstance(Object)}  Injector.addInstance},
+ * {@link Injector#addInstance(Object)  Injector.addInstance},
  * and then the steps begin to execute, reading and writing from this map.
  * Some steps create objects and add them to this map; others manipulate the map itself.
  */
 final class PlanInterpreter {
     private static final Logger logger = LogManager.getLogger(PlanInterpreter.class);
-    private final Map<Class<?>, Object> instances = new LinkedHashMap<>();
+    private final Map<Class<?>, List<Object>> instances = new LinkedHashMap<>();
+    private final ProxyPool proxyPool;
 
-    PlanInterpreter(Map<Class<?>, Object> existingInstances) {
+    PlanInterpreter(Map<Class<?>, Object> existingInstances, ProxyPool proxyPool) {
+        this.proxyPool = proxyPool;
         existingInstances.forEach(this::addInstance);
     }
 
@@ -57,37 +64,55 @@ final class PlanInterpreter {
                 logger.trace("Instantiating {}", spec.requestedType().getSimpleName());
                 addInstance(spec.requestedType(), instantiate(spec));
                 ++numConstructorCalls;
+            } else if (step instanceof RollupStep r) {
+                logger.trace("Rolling up {} -> {}", r.subtype().getSimpleName(), r.supertype().getSimpleName());
+                List<Object> subtypeInstances = getInstances(r.subtype());
+                for (Object instance : subtypeInstances) {
+                    addInstance(r.supertype(), instance);
+                }
+            } else if (step instanceof CreateListProxyStep c) {
+                logger.trace("Creating list proxy for {}", c.elementType().getSimpleName());
+                proxyPool.putNewListProxy(c.elementType());
+            } else if (step instanceof ResolveListProxyStep r) {
+                logger.trace("Resolving list proxy for {}", r.elementType().getSimpleName());
+                List<Object> currentInstances = getInstances(r.elementType());
+                proxyPool.resolveListProxy(r.elementType(), currentInstances);
             } else {
-                // TODO: switch patterns would make this unnecessary
                 assert false : "Unexpected step type: " + step.getClass().getSimpleName();
-                throw new IllegalStateException("Unexpected step type: " + step.getClass().getSimpleName());
+                throw new InjectionExecutionException("Unexpected step type: " + step.getClass().getSimpleName());
             }
         }
         logger.debug("Instantiated {} objects", numConstructorCalls);
     }
 
     /**
-     * @return the list element corresponding to instances.get(type).get(0),
-     * assuming that instances.get(type) has exactly one element.
-     * @throws IllegalStateException if instances.get(type) does not have exactly one element
+     * @return the single instance of the given type
+     * @throws InjectionExecutionException if there is not exactly one instance
      */
     public <T> T theInstanceOf(Class<T> type) {
-        Object instance = instances.get(type);
-        if (instance == null) {
-            throw new IllegalStateException("No object of type " + type.getSimpleName());
+        List<Object> list = instances.get(type);
+        if (list == null || list.isEmpty()) {
+            throw new InjectionExecutionException("No object of type " + type.getSimpleName());
         }
-        return type.cast(instance);
-    }
-
-    private void addInstance(Class<?> requestedType, Object instance) {
-        Object old = instances.put(requestedType, instance);
-        if (old != null) {
-            throw new IllegalStateException("Multiple objects for " + requestedType);
+        if (list.size() > 1) {
+            throw new InjectionExecutionException("Multiple objects for " + type.getSimpleName() + ": expected exactly one");
         }
+        return type.cast(list.get(0));
     }
 
     /**
-     * @throws IllegalStateException if the <code>MethodHandle</code> throws.
+     * @return all instances of the given type, or an empty list if none
+     */
+    List<Object> getInstances(Class<?> type) {
+        return instances.getOrDefault(type, Collections.emptyList());
+    }
+
+    private void addInstance(Class<?> requestedType, Object instance) {
+        instances.computeIfAbsent(requestedType, k -> new ArrayList<>()).add(instance);
+    }
+
+    /**
+     * @throws InjectionExecutionException if the <code>MethodHandle</code> throws a checked exception.
      */
     @SuppressForbidden(
         reason = "Can't call invokeExact because we don't know the method argument types statically, "
@@ -97,12 +122,17 @@ final class PlanInterpreter {
         Object[] args = spec.parameters().stream().map(this::parameterValue).toArray();
         try {
             return spec.methodHandle().invokeWithArguments(args);
+        } catch (RuntimeException | Error e) {
+            throw e;
         } catch (Throwable e) {
-            throw new IllegalStateException("Unexpected exception while instantiating {}" + spec, e);
+            throw new InjectionExecutionException("Unexpected exception while instantiating " + spec, e);
         }
     }
 
     private Object parameterValue(ParameterSpec parameterSpec) {
+        if (parameterSpec.isList()) {
+            return proxyPool.theProxyFor(parameterSpec.injectableType());
+        }
         return theInstanceOf(parameterSpec.formalType());
     }
 

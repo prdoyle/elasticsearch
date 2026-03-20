@@ -9,6 +9,6 @@
 
 package org.elasticsearch.injection.spec;
 
-public sealed interface InjectionSpec permits MethodHandleSpec, ExistingInstanceSpec {
+public sealed interface InjectionSpec permits AmbiguousSpec, UnambiguousSpec {
     Class<?> requestedType();
 }
