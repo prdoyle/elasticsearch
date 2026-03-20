@@ -140,7 +140,7 @@ final class Planner {
             if (p.isList()) {
                 planForListParameter(p, depth + 1);
             } else {
-                logger.trace("{}- Recursing into {} for actual parameter {}", indent(depth), p.injectableType(), p);
+                logger.trace("{}- Recursing into {} for parameter {}", indent(depth), p.injectableType(), p);
                 planForClass(p.injectableType(), depth + 1);
             }
         }
