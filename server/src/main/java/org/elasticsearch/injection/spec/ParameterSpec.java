@@ -42,6 +42,14 @@ public record ParameterSpec(String name, Class<?> formalType, Class<?> injectabl
                 return new ParameterSpec(parameter.getName(), parameter.getType(), elementType, Set.copyOf(modifiers));
             }
         }
+        if (parameter.getType().isInterface() && parameter.isAnnotationPresent(Actual.class) == false) {
+            return new ParameterSpec(
+                parameter.getName(),
+                parameter.getType(),
+                parameter.getType(),
+                Set.of(ParameterModifier.CAN_BE_PROXIED)
+            );
+        }
         return new ParameterSpec(parameter.getName(), parameter.getType(), parameter.getType());
     }
 

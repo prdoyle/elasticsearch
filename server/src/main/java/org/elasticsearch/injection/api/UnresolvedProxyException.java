@@ -10,13 +10,14 @@
 package org.elasticsearch.injection.api;
 
 /**
- * Thrown when a proxy list is accessed before it has been resolved.
- * This typically means a constructor is trying to use a {@code List<T>} parameter
- * during construction, before all implementations of {@code T} have been instantiated.
+ * Thrown when a proxy is accessed before it has been resolved.
+ * This typically means a constructor is trying to use a proxy parameter
+ * during construction, before the target has been instantiated.
  * <p>
- * To break circular dependencies, the injector provides a proxy {@link java.util.List} that is
- * populated later. If a constructor tries to iterate or query this list, this exception is thrown.
- * The {@link Actual @Actual} annotation can be used to request a non-proxy list,
+ * To break circular dependencies, the injector provides proxy objects (either a proxy
+ * {@link java.util.List} or a JDK dynamic proxy for interfaces) that are resolved later.
+ * If a constructor tries to use the proxy before resolution, this exception is thrown.
+ * The {@link Actual @Actual} annotation can be used to request a non-proxy instance,
  * at the cost of creating a hard ordering constraint.
  */
 public class UnresolvedProxyException extends IllegalStateException {

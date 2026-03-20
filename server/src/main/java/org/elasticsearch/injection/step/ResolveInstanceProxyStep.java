@@ -9,5 +9,10 @@
 
 package org.elasticsearch.injection.step;
 
-public sealed interface InjectionStep permits CreateInstanceProxyStep, CreateListProxyStep, InstantiateStep,
-    ResolveInstanceProxyStep, ResolveListProxyStep, RollupStep {}
+/**
+ * Resolves a proxy previously created by a {@link CreateInstanceProxyStep},
+ * pointing it at the real instance of the given type.
+ *
+ * @param type the interface type whose proxy should be resolved
+ */
+public record ResolveInstanceProxyStep(Class<?> type) implements InjectionStep {}

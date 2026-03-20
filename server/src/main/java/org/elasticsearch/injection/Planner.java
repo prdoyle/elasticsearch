@@ -17,9 +17,11 @@ import org.elasticsearch.injection.spec.InjectionSpec;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
 import org.elasticsearch.injection.spec.SubtypeSpec;
+import org.elasticsearch.injection.step.CreateInstanceProxyStep;
 import org.elasticsearch.injection.step.CreateListProxyStep;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.injection.step.InstantiateStep;
+import org.elasticsearch.injection.step.ResolveInstanceProxyStep;
 import org.elasticsearch.injection.step.ResolveListProxyStep;
 import org.elasticsearch.injection.step.RollupStep;
 import org.elasticsearch.logging.LogManager;
@@ -37,6 +39,10 @@ import static java.util.Collections.unmodifiableSet;
 
 /**
  * <em>Evolution note</em>: the intent is to plan one domain/subsystem at a time.
+ * <p>
+ * <em>Evolution note</em>: which parameters are proxied is currently determined by
+ * {@link ParameterSpec}. In the future, this could be configurable per-Planner
+ * to allow different policies.
  */
 final class Planner {
     private static final Logger logger = LogManager.getLogger(Planner.class);
@@ -47,7 +53,8 @@ final class Planner {
     final Set<Class<?>> allParameterTypes; // All the injectable types in all dependencies (recursively) of all required types
     final Set<InjectionSpec> startedPlanning;
     final Set<InjectionSpec> finishedPlanning;
-    final Set<Class<?>> alreadyProxied;
+    final Set<Class<?>> alreadyListProxied;
+    final Set<Class<?>> alreadyInstanceProxied;
     final List<String> dependencyPath; // For cycle reporting
 
     /**
@@ -62,7 +69,8 @@ final class Planner {
         this.allParameterTypes = unmodifiableSet(allParameterTypes);
         this.startedPlanning = new HashSet<>();
         this.finishedPlanning = new HashSet<>();
-        this.alreadyProxied = new HashSet<>();
+        this.alreadyListProxied = new HashSet<>();
+        this.alreadyInstanceProxied = new HashSet<>();
         this.dependencyPath = new ArrayList<>();
     }
 
@@ -139,6 +147,8 @@ final class Planner {
         for (var p : m.parameters()) {
             if (p.isList()) {
                 planForListParameter(p, depth + 1);
+            } else if (p.canBeProxied()) {
+                planForInstanceProxy(p, depth + 1);
             } else {
                 logger.trace("{}- Recursing into {} for parameter {}", indent(depth), p.injectableType(), p);
                 planForClass(p.injectableType(), depth + 1);
@@ -151,7 +161,7 @@ final class Planner {
         Class<?> elementType = p.injectableType();
         if (p.canBeProxied()) {
             // Create a proxy list if we haven't already
-            if (alreadyProxied.add(elementType)) {
+            if (alreadyListProxied.add(elementType)) {
                 logger.trace("{}- Creating list proxy for {}", indent(depth), elementType.getSimpleName());
                 addStep(new CreateListProxyStep(elementType), depth);
             }
@@ -160,10 +170,18 @@ final class Planner {
             logger.trace("{}- Planning actual list of {}", indent(depth), elementType.getSimpleName());
             planAllCandidatesOf(elementType, depth);
             // Ensure the proxy is created and resolved
-            if (alreadyProxied.add(elementType)) {
+            if (alreadyListProxied.add(elementType)) {
                 addStep(new CreateListProxyStep(elementType), depth);
             }
             addStep(new ResolveListProxyStep(elementType), depth);
+        }
+    }
+
+    private void planForInstanceProxy(ParameterSpec p, int depth) {
+        Class<?> type = p.injectableType();
+        if (alreadyInstanceProxied.add(type)) {
+            logger.trace("{}- Creating instance proxy for {}", indent(depth), type.getSimpleName());
+            addStep(new CreateInstanceProxyStep(type), depth);
         }
     }
 
@@ -195,23 +213,28 @@ final class Planner {
     }
 
     /**
-     * Emit {@link ResolveListProxyStep} for any proxies that haven't been resolved yet.
+     * Emit resolve steps for any proxies that haven't been resolved yet.
      * Before resolving, plan the spec for each proxied type so that rollup steps are emitted.
      */
     private void planProxyResolution() {
-        for (Class<?> proxiedType : alreadyProxied) {
-            // Check if we already planned a resolution for this type
+        for (Class<?> proxiedType : alreadyListProxied) {
             boolean alreadyResolved = plan.stream().anyMatch(
                 step -> step instanceof ResolveListProxyStep r && r.elementType() == proxiedType
             );
             if (alreadyResolved == false) {
-                // Plan the spec for this type (e.g. SubtypeSpec will emit RollupSteps)
                 InjectionSpec spec = specsByClass.get(proxiedType);
                 if (spec != null) {
                     planForSpec(spec, 0);
                 }
                 plan.add(new ResolveListProxyStep(proxiedType));
             }
+        }
+        for (Class<?> proxiedType : alreadyInstanceProxied) {
+            InjectionSpec spec = specsByClass.get(proxiedType);
+            if (spec != null) {
+                planForSpec(spec, 0);
+            }
+            plan.add(new ResolveInstanceProxyStep(proxiedType));
         }
     }
 

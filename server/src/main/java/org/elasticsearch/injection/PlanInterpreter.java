@@ -12,9 +12,11 @@ package org.elasticsearch.injection;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.injection.spec.MethodHandleSpec;
 import org.elasticsearch.injection.spec.ParameterSpec;
+import org.elasticsearch.injection.step.CreateInstanceProxyStep;
 import org.elasticsearch.injection.step.CreateListProxyStep;
 import org.elasticsearch.injection.step.InjectionStep;
 import org.elasticsearch.injection.step.InstantiateStep;
+import org.elasticsearch.injection.step.ResolveInstanceProxyStep;
 import org.elasticsearch.injection.step.ResolveListProxyStep;
 import org.elasticsearch.injection.step.RollupStep;
 import org.elasticsearch.logging.LogManager;
@@ -77,6 +79,12 @@ final class PlanInterpreter {
                 logger.trace("Resolving list proxy for {}", r.elementType().getSimpleName());
                 List<Object> currentInstances = getInstances(r.elementType());
                 proxyPool.resolveListProxy(r.elementType(), currentInstances);
+            } else if (step instanceof CreateInstanceProxyStep c) {
+                logger.trace("Creating instance proxy for {}", c.type().getSimpleName());
+                proxyPool.putNewInstanceProxy(c.type());
+            } else if (step instanceof ResolveInstanceProxyStep r) {
+                logger.trace("Resolving instance proxy for {}", r.type().getSimpleName());
+                proxyPool.resolveInstanceProxy(r.type(), theInstanceOf(r.type()));
             } else {
                 assert false : "Unexpected step type: " + step.getClass().getSimpleName();
                 throw new InjectionExecutionException("Unexpected step type: " + step.getClass().getSimpleName());
@@ -132,6 +140,8 @@ final class PlanInterpreter {
     private Object parameterValue(ParameterSpec parameterSpec) {
         if (parameterSpec.isList()) {
             return proxyPool.theProxyFor(parameterSpec.injectableType());
+        } else if (parameterSpec.canBeProxied()) {
+            return proxyPool.theInstanceProxyFor(parameterSpec.injectableType());
         }
         return theInstanceOf(parameterSpec.formalType());
     }

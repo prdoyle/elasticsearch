@@ -128,6 +128,45 @@ public class InjectorTests extends ESTestCase {
     }
 
     //
+    // Interface proxy tests
+    //
+
+    public void testInterfaceProxy() {
+        interface Greeter {
+            String greet();
+        }
+        record EnglishGreeter() implements Greeter {
+            @Override
+            public String greet() {
+                return "hello";
+            }
+        }
+        record GreeterClient(Greeter greeter) {}
+        Injector injector = Injector.create();
+        injector.addClasses(List.of(EnglishGreeter.class, GreeterClient.class));
+        GreeterClient client = injector.inject(GreeterClient.class);
+        assertEquals("hello", client.greeter().greet());
+    }
+
+    public void testInterfaceCycleViaProxy() {
+        // Like testMutualInjectionViaList, but with a single interface instead of a list
+        interface Named {
+            String name();
+        }
+        record UsesNamed(Named named) {}
+        record NamedImpl(UsesNamed usesNamed) implements Named {
+            @Override
+            public String name() {
+                return "impl";
+            }
+        }
+        Injector injector = Injector.create();
+        injector.addClasses(List.of(UsesNamed.class, NamedImpl.class));
+        UsesNamed a = injector.inject(UsesNamed.class);
+        assertEquals("impl", a.named().name());
+    }
+
+    //
     // Single-result convenience method
     //
 
@@ -194,14 +233,14 @@ public class InjectorTests extends ESTestCase {
     }
 
     public void testBadCircularDependencyViaSupertype() {
+        // With interface proxy support, the cycle Service2 -> Service1 -> Service3 -> Service2
+        // is broken because Service1 (an interface) gets proxied automatically
         interface Service1 {}
         record Service2(Service1 service1) {}
         record Service3(Service2 service2) implements Service1 {}
-        assertThrows(CyclicDependencyException.class, () -> {
-            MethodHandles.lookup();
-            Injector injector = Injector.create();
-            injector.addClasses(List.of(Service2.class, Service3.class)).inject(List.of());
-        });
+        MethodHandles.lookup();
+        Injector injector = Injector.create();
+        injector.addClasses(List.of(Service2.class, Service3.class)).inject(List.of());
     }
 
     public void testBadUseOfListProxy() {
@@ -219,6 +258,58 @@ public class InjectorTests extends ESTestCase {
             Injector injector = Injector.create();
             injector.addClasses(List.of(Gamma.class, Delta.class));
             injector.inject(Gamma.class);
+        });
+    }
+
+    public void testActualInterface() {
+        // @Actual on an interface parameter prevents proxying, so the cycle is not broken
+        interface Named {
+            String name();
+        }
+        record UsesNamed(@Actual Named named) {}
+        record NamedImpl(UsesNamed usesNamed) implements Named {
+            @Override
+            public String name() {
+                return "impl";
+            }
+        }
+        assertThrows(CyclicDependencyException.class, () -> {
+            MethodHandles.lookup();
+            Injector.create().addClasses(List.of(UsesNamed.class, NamedImpl.class)).inject(UsesNamed.class);
+        });
+    }
+
+    public void testBadUseOfInterfaceProxy() {
+        // Calling a method on a proxied interface during construction throws
+        interface Named {
+            String name();
+        }
+        record BadNamedUser(Named named) {
+            public BadNamedUser {
+                // Shouldn't use the proxy during construction!
+                named.name();
+            }
+        }
+        record NamedImpl() implements Named {
+            @Override
+            public String name() {
+                return "impl";
+            }
+        }
+        assertThrows(UnresolvedProxyException.class, () -> {
+            Injector.create().addClasses(List.of(NamedImpl.class, BadNamedUser.class)).inject(BadNamedUser.class);
+        });
+    }
+
+    public void testAllActualCycle() {
+        // Two interfaces, each @Actual, forming a cycle — no proxies possible
+        interface Role1 {}
+        interface Role2 {}
+        record ImplA(@Actual Role1 role1) implements Role2 {}
+        record ImplB(@Actual Role2 role2) implements Role1 {}
+        assertThrows(CyclicDependencyException.class, () -> {
+            MethodHandles.lookup();
+            Injector.create().addClasses(List.of(ImplA.class, ImplB.class)).inject(List.of());
         });
     }
 
