@@ -10,16 +10,28 @@ an abstraction over the OpenTelemetry API. All locations in the code that
 perform instrumentation and tracing must use these abstractions.
 
 Separately, there is the [apm](./modules/apm) module, which works with the
-OpenTelemetry API directly to record trace data.  Underneath the OTel API, we
-use Elastic's [APM agent for Java][agent], which attaches at runtime to the
-Elasticsearch JVM and removes the need for Elasticsearch to hard-code the use of
-an OTel implementation. Note that while it is possible to programmatically start
-the APM agent, the Security Manager permissions required make this essentially
-impossible.
+OpenTelemetry API directly to record trace data. Export is pluggable:
+
+* **Elastic [APM Java agent][agent] (default):** The agent attaches to the Elasticsearch
+  JVM (via `-javaagent`, see server startup / `APMJvmOptions`) and supplies a real
+  OpenTelemetry implementation so the API is not a no-op. Spans are sent to the
+  URL configured with `telemetry.agent.server_url` (APM intake / Elastic APM).
+* **Elasticsearch-owned OpenTelemetry SDK:** When the JVM system property
+  `telemetry.otel.traces.enabled` is set to `true` at startup, Elasticsearch
+  uses an embedded OpenTelemetry SDK with **OTLP HTTP** export to the endpoint
+  configured under `telemetry.otel.traces.*` (same overall pattern as OTLP
+  metrics under `telemetry.otel.metrics.*`). Implementation details live in the
+  `apm` module (for example [`OtelSdkSettings`](./modules/apm/src/main/java/org/elasticsearch/telemetry/apm/internal/export/otelsdk/OtelSdkSettings.java)).
+
+The OpenTelemetry API does not bundle an implementation. Without the agent and
+without enabling OTLP trace export, the default no-op implementation applies.
 
 ## How is tracing configured?
 
-You must supply configuration and credentials for the APM server (see below).
+You must supply configuration and credentials for where traces should be sent.
+
+### APM Java agent (Elastic APM / intake)
+
 In your `elasticsearch.yml` add the following configuration:
 
 ```
@@ -33,9 +45,9 @@ When using a secret token to authenticate with the APM server, you must add it t
 
 then enter the token when prompted. If you are using API keys, change the keystore key name to `telemetry.api_key`.
 
-All APM settings live under `telemetry`. Tracing related settings go under `telemetry.tracing` and settings
-related to the Java agent go under `telemetry.agent`. Anything you set under there will be propagated to
-the agent.
+All APM-related settings live under `telemetry`. Tracing toggles use
+`telemetry.tracing.*`. Settings that are forwarded to the Java agent use
+`telemetry.agent.*`; those values are propagated to the agent.
 
 For agent settings that can be changed dynamically, you can use the cluster
 settings REST API. For example, to change the sampling rate:
@@ -46,20 +58,52 @@ settings REST API. For example, to change the sampling rate:
       -d '{ "persistent": { "telemetry.agent.transaction_sample_rate": "0.75" } }' \
       https://localhost:9200/_cluster/settings
 
+### OpenTelemetry SDK (OTLP HTTP) for traces
 
-### More details about configuration
+To export traces via **OTLP HTTP** (for example to an OpenTelemetry Collector)
+instead of the APM agent path, you must enable export at **JVM startup** and
+configure the OTLP endpoint in `elasticsearch.yml`:
+
+* Set the JVM system property **`telemetry.otel.traces.enabled=true`** (see
+  [`TelemetryProvider`](./server/src/main/java/org/elasticsearch/telemetry/TelemetryProvider.java)).
+* Set **`telemetry.otel.traces.endpoint`** to your collector URL, including the
+  traces path (for example `https://otel-collector:4318/v1/traces`).
+
+Optional and operational settings in the same namespace include
+`telemetry.otel.traces.interval` (batch delay),
+`telemetry.otel.traces.max_spans`, and
+`telemetry.otel.traces.stack_trace_limit` (defaults align with common Elastic
+APM agent defaults such as root-only spans and no stack traces on span errors).
+Those policy settings are **dynamic** where marked in
+[`OtelSdkSettings`](./modules/apm/src/main/java/org/elasticsearch/telemetry/apm/internal/export/otelsdk/OtelSdkSettings.java).
+
+Authentication for OTLP export uses the same keystore entries as other
+telemetry export: **`telemetry.api_key`** or **`telemetry.secret_token`**
+(see [`OtelSdkExportMeterSupplier`](./modules/apm/src/main/java/org/elasticsearch/telemetry/apm/internal/export/otelsdk/OtelSdkExportMeterSupplier.java)
+for the shared authorization header builder).
+
+When Elasticsearch owns OTLP trace export, the APM agent is not used for
+shipping those spans; the node adjusts agent **recording** so the agent is not
+left enabled only for trace export when it is no longer needed for that role.
+
+### More details about APM Java agent bootstrap
+
+This section applies when you use the **Elastic APM Java agent** to ship traces
+(for example to Elastic APM Server). OTLP HTTP export reads credentials from the
+same keystore keys but does **not** use the temporary agent config file described
+below.
 
 For context, the APM agent pulls configuration from [multiple
 sources][agent-config], with a hierarchy that means, for example, that options
 set in the config file cannot be overridden via system properties.
 
-Now, in order to send tracing data to the APM server, ES needs to be configured with
-either a `secret_key` or an `api_key`. We could configure these in the agent via
+In order to send tracing data via the agent, ES needs to be configured with
+either a **secret token** or an **API key** in the keystore. We could configure these in the agent via
 system properties, but then their values would be available to any Java code in
 Elasticsearch that can read system properties.
 
 Instead, when Elasticsearch bootstraps itself, it compiles all APM settings
-together, including any `secret_key` or `api_key` values from the ES keystore,
+together, including any `telemetry.secret_token` or `telemetry.api_key` values from the ES keystore,
 and writes out a temporary APM config file containing all static configuration
 (i.e. values that cannot change after the agent starts).  This file is deleted
 as soon as possible after ES starts up. Settings that are not sensitive and can
@@ -69,9 +113,12 @@ later picks up and applies.
 
 ## Where is tracing data sent?
 
-You need to have an APM server running somewhere. For example, you can create a
-deployment in [Elastic Cloud](https://www.elastic.co/cloud/) with Elastic's APM
-integration.
+For the **agent** path, you need an APM server or Elastic Stack deployment that
+accepts Elastic APM intake. For example, you can create a deployment in
+[Elastic Cloud](https://www.elastic.co/cloud/) with Elastic's APM integration.
+
+For the **OTLP** path, you need an endpoint that accepts OTLP over HTTP (for
+example an OpenTelemetry Collector or compatible backend).
 
 ## What do we trace?
 
@@ -85,10 +132,11 @@ A span can be associated with a parent span, which allows all spans in, for
 example, a REST request to be grouped together. Spans can track work across
 different Elasticsearch nodes.
 
-Elasticsearch also supports distributed tracing via [W3c Trace Context][w3c]
+Elasticsearch supports distributed tracing via [W3C Trace Context][w3c]
 headers. If clients of Elasticsearch send these headers with their requests,
-then that data will be forwarded to the APM server in order to yield a trace
-across systems.
+then that context is honored for Elasticsearch-emitted spans whether export
+uses the APM agent or the embedded OpenTelemetry SDK (W3C propagators are
+configured for OTLP export).
 
 In rare circumstances, it is possible to avoid tracing a task using
 `TaskManager#register(String,String,TaskAwareRequest,boolean)`. For example,
@@ -110,7 +158,7 @@ with the REST request, otherwise all the background task spans will be
 associated with the REST request for as long as Elasticsearch is running.
 `ThreadContext` provides the `clearTraceContext`() method for this purpose.
 
-## How to I trace something that isn't a task?
+## How do I trace something that isn't a task?
 
 First work out if you can turn it into a task. No, really.
 
@@ -147,12 +195,12 @@ Elasticsearch.
 
 In the OpenTelemetry documentation, spans, scope and context are fairly
 straightforward to use, since `Scope` is an `AutoCloseable` and so can be
-easily created and cleaned up use try-with-resources blocks. Unfortunately,
+easily created and cleaned up using try-with-resources blocks. Unfortunately,
 Elasticsearch is a complex piece of software, and also extremely asynchronous,
 so the typical OpenTelemetry examples do not work.
 
 Nonetheless, it is possible to manually use scope where we need more detail by
-explicitly opening a scope via the `Tracer`.
+explicitly opening a scope via the `Tracer` API.
 
 
 [otel]: https://opentelemetry.io/

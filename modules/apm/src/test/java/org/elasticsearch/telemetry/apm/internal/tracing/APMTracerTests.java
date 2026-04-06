@@ -15,14 +15,18 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 
 import org.apache.lucene.util.automaton.CharacterRunAutomaton;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.telemetry.apm.internal.APMAgentSettings;
+import org.elasticsearch.telemetry.apm.internal.export.otelsdk.OtelSdkSettings;
+import org.elasticsearch.telemetry.apm.internal.export.otelsdk.OtelSdkTelemetryResources;
 import org.elasticsearch.telemetry.tracing.TraceContext;
 import org.elasticsearch.telemetry.tracing.Traceable;
 import org.elasticsearch.test.ESTestCase;
@@ -37,6 +41,8 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
+import static org.elasticsearch.telemetry.TelemetryProvider.OTEL_METRICS_ENABLED_SYSTEM_PROPERTY;
+import static org.elasticsearch.telemetry.TelemetryProvider.OTEL_TRACES_ENABLED_SYSTEM_PROPERTY;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.hasKey;
@@ -44,9 +50,12 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @TestLogging(reason = "improved visibility", value = "org.elasticsearch.telemetry.apm.internal.tracing:TRACE")
 public class APMTracerTests extends ESTestCase {
@@ -257,6 +266,88 @@ public class APMTracerTests extends ESTestCase {
     /**
      * Check that sensitive attributes are not added verbatim to a span, but instead the value is redacted.
      */
+    /**
+     * Agent path: {@code stack_trace_limit=0} should record errors as status + exception attributes, not {@link Span#recordException(Throwable)}.
+     */
+    public void test_addError_stackTraceLimitZero_setsStatusWithoutRecordingException() {
+        Settings settings = Settings.builder()
+            .put(APMAgentSettings.TELEMETRY_TRACING_ENABLED_SETTING.getKey(), true)
+            .put("telemetry.agent.stack_trace_limit", "0")
+            .build();
+        SpyAPMTracer apmTracer = new SpyAPMTracer(settings);
+        apmTracer.doStart();
+        apmTracer.startTrace(new ThreadContext(settings), TRACEABLE1, "name1", null);
+        RuntimeException ex = new RuntimeException("boom");
+        apmTracer.addError(TRACEABLE1, ex);
+        verify(apmTracer.lastStartedSpan, never()).recordException(any());
+        verify(apmTracer.lastStartedSpan).setStatus(StatusCode.ERROR, "boom");
+    }
+
+    /**
+     * Agent path: positive {@code stack_trace_limit} should use {@link Span#recordException(Throwable)}.
+     */
+    public void test_addError_stackTraceLimitPositive_recordsException() {
+        Settings settings = Settings.builder()
+            .put(APMAgentSettings.TELEMETRY_TRACING_ENABLED_SETTING.getKey(), true)
+            .put("telemetry.agent.stack_trace_limit", "8")
+            .build();
+        SpyAPMTracer apmTracer = new SpyAPMTracer(settings);
+        apmTracer.doStart();
+        apmTracer.startTrace(new ThreadContext(settings), TRACEABLE1, "name1", null);
+        RuntimeException ex = new RuntimeException("boom");
+        apmTracer.addError(TRACEABLE1, ex);
+        verify(apmTracer.lastStartedSpan).recordException(ex);
+    }
+
+    /**
+     * Cluster updates to {@code telemetry.otel.traces.max_spans} must not override agent limits when the APM agent owns export.
+     */
+    public void test_setMaxChildSpans_ignoredWhenAgentOwnsTraces() {
+        Settings settings = Settings.builder()
+            .put(APMAgentSettings.TELEMETRY_TRACING_ENABLED_SETTING.getKey(), true)
+            .put("telemetry.agent.transaction_max_spans", "4")
+            .build();
+        SpyAPMTracer apmTracer = new SpyAPMTracer(settings);
+        assertThat(apmTracer.getMaxChildSpansForTesting(), is(4));
+        apmTracer.setMaxChildSpans(1);
+        assertThat(apmTracer.getMaxChildSpansForTesting(), is(4));
+    }
+
+    /**
+     * When Elasticsearch owns OTLP trace export, dynamic {@link APMTracer#setMaxChildSpans} updates apply.
+     */
+    @SuppressForbidden(reason = "tests OTLP trace JVM gate")
+    public void test_setMaxChildSpans_appliedWhenOtelSdkOwnsTraces() throws Exception {
+        String prevTraces = System.getProperty(OTEL_TRACES_ENABLED_SYSTEM_PROPERTY);
+        String prevMetrics = System.getProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY);
+        try {
+            System.setProperty(OTEL_TRACES_ENABLED_SYSTEM_PROPERTY, "true");
+            System.clearProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY);
+            Settings settings = Settings.builder()
+                .put(OtelSdkSettings.TELEMETRY_OTEL_TRACES_ENDPOINT.getKey(), "http://127.0.0.1:9/v1/traces")
+                .put(OtelSdkSettings.TELEMETRY_OTEL_TRACES_MAX_SPANS.getKey(), "5")
+                .put(APMAgentSettings.TELEMETRY_TRACING_ENABLED_SETTING.getKey(), true)
+                .build();
+            try (OtelSdkTelemetryResources resources = OtelSdkTelemetryResources.maybeCreate(settings)) {
+                APMTracer tracer = new APMTracer(settings, resources);
+                assertThat(tracer.getMaxChildSpansForTesting(), is(5));
+                tracer.setMaxChildSpans(2);
+                assertThat(tracer.getMaxChildSpansForTesting(), is(2));
+            }
+        } finally {
+            if (prevTraces == null) {
+                System.clearProperty(OTEL_TRACES_ENABLED_SYSTEM_PROPERTY);
+            } else {
+                System.setProperty(OTEL_TRACES_ENABLED_SYSTEM_PROPERTY, prevTraces);
+            }
+            if (prevMetrics == null) {
+                System.clearProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY);
+            } else {
+                System.setProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY, prevMetrics);
+            }
+        }
+    }
+
     public void test_whenAddingAttributes_thenSensitiveValuesAreRedacted() {
         Settings settings = Settings.builder().put(APMAgentSettings.TELEMETRY_TRACING_ENABLED_SETTING.getKey(), false).build();
         APMTracer apmTracer = buildTracer(settings);
@@ -300,6 +391,7 @@ public class APMTracerTests extends ESTestCase {
     static class SpyAPMTracer extends APMTracer {
 
         Map<String, Instant> spanStartTimeMap;
+        Span lastStartedSpan;
 
         SpyAPMTracer(Settings settings) {
             super(settings);
@@ -402,6 +494,7 @@ public class APMTracerTests extends ESTestCase {
             @Override
             public Span startSpan() {
                 // finally record the spanName-startTime association when the span is actually started
+                SpyAPMTracer.this.lastStartedSpan = span;
                 spanStartTimeMap.put(spanName, startTime);
                 return span;
             }

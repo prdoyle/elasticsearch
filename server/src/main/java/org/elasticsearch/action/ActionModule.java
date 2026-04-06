@@ -589,7 +589,7 @@ public class ActionModule extends AbstractModule {
         threadContext.putTransient(Task.TRACE_START_TIME, Instant.ofEpochMilli(System.currentTimeMillis()));
         for (final RestHeaderDefinition restHeader : headersToCopy) {
             final String name = restHeader.getName();
-            final List<String> headerValues = request.getHeaders().get(name);
+            final List<String> headerValues = getHeaderValuesIgnoreCase(request, name);
             if (headerValues != null && headerValues.isEmpty() == false) {
                 final List<String> distinctHeaderValues = headerValues.stream().distinct().toList();
                 if (restHeader.isMultiValueAllowed() == false && distinctHeaderValues.size() > 1) {
@@ -608,6 +608,26 @@ public class ActionModule extends AbstractModule {
                 }
             }
         }
+    }
+
+    /**
+     * HTTP header maps are not guaranteed to use the same casing as our canonical names; match case-insensitively.
+     */
+    private static List<String> getHeaderValuesIgnoreCase(HttpPreRequest request, String headerName) {
+        Map<String, List<String>> headers = request.getHeaders();
+        List<String> values = headers.get(headerName);
+        if (values != null && values.isEmpty() == false) {
+            return values;
+        }
+        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(headerName)) {
+                List<String> v = entry.getValue();
+                if (v != null && v.isEmpty() == false) {
+                    return v;
+                }
+            }
+        }
+        return null;
     }
 
     public Map<String, ActionHandler> getActions() {

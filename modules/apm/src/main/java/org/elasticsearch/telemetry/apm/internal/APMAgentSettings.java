@@ -19,6 +19,7 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Booleans;
 import org.elasticsearch.core.SuppressForbidden;
+import org.elasticsearch.telemetry.apm.internal.export.otelsdk.OtelSdkSettings;
 import org.elasticsearch.telemetry.apm.internal.tracing.APMTracer;
 
 import java.util.List;
@@ -28,6 +29,7 @@ import java.util.Set;
 import static org.elasticsearch.common.settings.Setting.Property.NodeScope;
 import static org.elasticsearch.common.settings.Setting.Property.OperatorDynamic;
 import static org.elasticsearch.telemetry.TelemetryProvider.OTEL_METRICS_ENABLED_SYSTEM_PROPERTY;
+import static org.elasticsearch.telemetry.TelemetryProvider.OTEL_TRACES_ENABLED_SYSTEM_PROPERTY;
 
 /**
  * This class is responsible for APM settings, both for Elasticsearch and the APM Java agent.
@@ -59,6 +61,8 @@ public class APMAgentSettings {
         clusterSettings.addSettingsUpdateConsumer(TELEMETRY_TRACING_NAMES_INCLUDE_SETTING, apmTracer::setIncludeNames);
         clusterSettings.addSettingsUpdateConsumer(TELEMETRY_TRACING_NAMES_EXCLUDE_SETTING, apmTracer::setExcludeNames);
         clusterSettings.addSettingsUpdateConsumer(TELEMETRY_TRACING_SANITIZE_FIELD_NAMES, apmTracer::setLabelFilters);
+        clusterSettings.addSettingsUpdateConsumer(OtelSdkSettings.TELEMETRY_OTEL_TRACES_MAX_SPANS, apmTracer::setMaxChildSpans);
+        clusterSettings.addSettingsUpdateConsumer(OtelSdkSettings.TELEMETRY_OTEL_TRACES_STACK_TRACE_LIMIT, apmTracer::setStackTraceLimit);
         clusterSettings.addAffixMapUpdateConsumer(APM_AGENT_SETTINGS, map -> map.forEach(this::setAgentSetting), (x, y) -> {});
     }
 
@@ -76,10 +80,11 @@ public class APMAgentSettings {
         APM_AGENT_SETTINGS.getAsMap(settings).forEach(this::setAgentSetting);
     }
 
-    // Keep the agent active only when it still has work to do: tracing or metrics when OTEL does not own them.
+    // Keep the agent active only when it still has work to do: tracing or metrics when OTEL does not own export for them.
     private boolean shouldRecord(boolean tracingEnabled, boolean metricsEnabled) {
-        return tracingEnabled
-            || (metricsEnabled && Booleans.parseBoolean(System.getProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY, "false")) == false);
+        boolean otelOwnsMetrics = Booleans.parseBoolean(System.getProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY, "false"));
+        boolean otelOwnsTraces = Booleans.parseBoolean(System.getProperty(OTEL_TRACES_ENABLED_SYSTEM_PROPERTY, "false"));
+        return (tracingEnabled && otelOwnsTraces == false) || (metricsEnabled && otelOwnsMetrics == false);
     }
 
     /**

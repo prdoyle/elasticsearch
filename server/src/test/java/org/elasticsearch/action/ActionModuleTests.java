@@ -25,6 +25,7 @@ import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.TestEnvironment;
 import org.elasticsearch.features.NodeFeature;
+import org.elasticsearch.http.HttpPreRequest;
 import org.elasticsearch.indices.TestIndexNameExpressionResolver;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.plugins.ActionPlugin;
@@ -52,6 +53,7 @@ import org.junit.Before;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -357,6 +359,62 @@ public class ActionModuleTests extends ESTestCase {
                         + " This functionality is not available to external plugins."
                 )
             );
+        } finally {
+            threadPool.shutdown();
+        }
+    }
+
+    /**
+     * Ensures {@link ActionModule#copyRequestHeadersToThreadContext} resolves W3C trace headers when the
+     * underlying HTTP header map keys are not lowercase (some clients send {@code Traceparent}).
+     */
+    public void testCopyRequestHeadersTraceparentCaseInsensitive() {
+        SettingsModule settings = new SettingsModule(Settings.EMPTY);
+        ThreadPool threadPool = new TestThreadPool(getTestName());
+        try {
+            UsageService usageService = new UsageService();
+            ActionModule actionModule = new ActionModule(
+                testEnv,
+                TestIndexNameExpressionResolver.newInstance(threadPool.getThreadContext()),
+                settings.getClusterSettings(),
+                settings.getSettingsFilter(),
+                threadPool,
+                emptyList(),
+                null,
+                null,
+                usageService,
+                null,
+                TelemetryProvider.NOOP,
+                mock(ClusterService.class),
+                null,
+                List.of(),
+                List.of(),
+                RestExtension.allowAll(),
+                new IncrementalBulkService(null, null, MeterRegistry.NOOP),
+                CrossProjectModeDecider.NOOP,
+                TestProjectResolvers.alwaysThrow()
+            );
+            actionModule.initRestHandlers(null, null);
+            final String traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+            HttpPreRequest request = new HttpPreRequest() {
+                @Override
+                public RestRequest.Method method() {
+                    return GET;
+                }
+
+                @Override
+                public String uri() {
+                    return "/_nodes/stats";
+                }
+
+                @Override
+                public Map<String, List<String>> getHeaders() {
+                    return Map.of("Traceparent", List.of(traceparent));
+                }
+            };
+            ThreadContext threadContext = threadPool.getThreadContext();
+            actionModule.copyRequestHeadersToThreadContext(request, threadContext);
+            assertEquals(traceparent, threadContext.getTransient(Task.PARENT_TRACE_PARENT_HEADER));
         } finally {
             threadPool.shutdown();
         }

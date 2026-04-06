@@ -21,6 +21,7 @@ dependencies {
   implementation "io.opentelemetry:opentelemetry-context:${otelVersion}"
   implementation "io.opentelemetry:opentelemetry-sdk:${otelVersion}"
   implementation "io.opentelemetry:opentelemetry-sdk-metrics:${otelVersion}"
+  implementation "io.opentelemetry:opentelemetry-sdk-trace:${otelVersion}"
   implementation("io.opentelemetry:opentelemetry-exporter-otlp:${otelVersion}") {
     exclude group: 'io.opentelemetry', module: 'opentelemetry-exporter-sender-okhttp'
   }
@@ -28,7 +29,6 @@ dependencies {
 
   implementation "io.opentelemetry:opentelemetry-sdk-common:${otelVersion}"
   runtimeOnly "io.opentelemetry:opentelemetry-common:${otelVersion}"
-  runtimeOnly "io.opentelemetry:opentelemetry-sdk-trace:${otelVersion}"
   runtimeOnly "io.opentelemetry:opentelemetry-sdk-logs:${otelVersion}"
   runtimeOnly "io.opentelemetry:opentelemetry-exporter-common:${otelVersion}"
   runtimeOnly "io.opentelemetry:opentelemetry-exporter-otlp-common:${otelVersion}"

@@ -11,24 +11,46 @@ package org.elasticsearch.telemetry.apm.internal.export.otelsdk;
 
 import org.elasticsearch.common.settings.MockSecureSettings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.test.ESTestCase;
+import org.junit.After;
+import org.junit.Before;
 
 import static org.elasticsearch.telemetry.TelemetryProvider.OTEL_METRICS_ENABLED_SYSTEM_PROPERTY;
+import static org.elasticsearch.telemetry.TelemetryProvider.OTEL_TRACES_ENABLED_SYSTEM_PROPERTY;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 
+@SuppressForbidden(reason = "tests manipulate OTel JVM system properties")
 public class OtelSdkExportMeterSupplierTests extends ESTestCase {
 
+    private String previousOtelMetricsEnabled;
+    private String previousOtelTracesEnabled;
+
+    @Before
+    public void saveSystemProperties() {
+        previousOtelMetricsEnabled = System.getProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY);
+        previousOtelTracesEnabled = System.getProperty(OTEL_TRACES_ENABLED_SYSTEM_PROPERTY);
+        System.clearProperty(OTEL_TRACES_ENABLED_SYSTEM_PROPERTY);
+        System.setProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY, "true");
+    }
+
+    @After
+    public void restoreSystemProperties() {
+        restoreSystemProperty(previousOtelMetricsEnabled, OTEL_METRICS_ENABLED_SYSTEM_PROPERTY);
+        restoreSystemProperty(previousOtelTracesEnabled, OTEL_TRACES_ENABLED_SYSTEM_PROPERTY);
+    }
+
     public void testGetWithoutEndpointThrows() {
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> new OtelSdkExportMeterSupplier(Settings.EMPTY).get());
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> OtelSdkTelemetryResources.maybeCreate(Settings.EMPTY));
         assertThat(e.getMessage(), containsString(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY));
         assertThat(e.getMessage(), containsString("telemetry.otel.metrics.endpoint"));
     }
 
     public void testGetWithEmptyEndpointThrows() {
         Settings settings = Settings.builder().put(OtelSdkSettings.TELEMETRY_OTEL_METRICS_ENDPOINT.getKey(), "").build();
-        expectThrows(IllegalStateException.class, () -> new OtelSdkExportMeterSupplier(settings).get());
+        expectThrows(IllegalStateException.class, () -> OtelSdkTelemetryResources.maybeCreate(settings));
     }
 
     public void testBuildOtlpAuthorizationHeaderWithNeitherCredential() {
@@ -58,15 +80,32 @@ public class OtelSdkExportMeterSupplierTests extends ESTestCase {
     }
 
     public void testCloseWithoutGetDoesNotThrow() {
-        new OtelSdkExportMeterSupplier(Settings.EMPTY).close();
+        Settings settings = Settings.builder()
+            .put(OtelSdkSettings.TELEMETRY_OTEL_METRICS_ENDPOINT.getKey(), "http://127.0.0.1:9/v1/metrics")
+            .build();
+        try (OtelSdkTelemetryResources resources = OtelSdkTelemetryResources.maybeCreate(settings)) {
+            assertNotNull(resources);
+        }
     }
 
     public void testDoubleCloseAfterGetDoesNotThrow() {
         String bogusUrl = "http://127.0.0.1:9/v1/metrics";
         Settings settings = Settings.builder().put(OtelSdkSettings.TELEMETRY_OTEL_METRICS_ENDPOINT.getKey(), bogusUrl).build();
-        OtelSdkExportMeterSupplier supplier = new OtelSdkExportMeterSupplier(settings);
+        OtelSdkTelemetryResources resources = OtelSdkTelemetryResources.maybeCreate(settings);
+        assertNotNull(resources);
+        OtelSdkExportMeterSupplier supplier = new OtelSdkExportMeterSupplier(resources);
         supplier.get();
         supplier.close();
         supplier.close();
+        resources.close();
+    }
+
+    @SuppressForbidden(reason = "Uses System.setProperty")
+    private static void restoreSystemProperty(String value, String key) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 }

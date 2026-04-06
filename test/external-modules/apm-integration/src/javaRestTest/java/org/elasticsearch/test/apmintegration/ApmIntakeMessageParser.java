@@ -131,7 +131,9 @@ public final class ApmIntakeMessageParser {
             throw new IOException("transaction missing name or trace_id");
         }
         String spanId = id != null ? id : "";
-        return new ReceivedTelemetry.ReceivedSpan(name, traceId, spanId, Optional.empty());
+        String parentId = getString(transaction, "parent_id");
+        Optional<String> parent = parentId == null || parentId.isEmpty() ? Optional.empty() : Optional.of(parentId);
+        return new ReceivedTelemetry.ReceivedSpan(name, traceId, spanId, parent);
     }
 
     @SuppressWarnings("unchecked")

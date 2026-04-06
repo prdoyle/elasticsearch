@@ -12,12 +12,13 @@ package org.elasticsearch.test.apmintegration;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.elasticsearch.core.SuppressForbidden;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.junit.rules.ExternalResource;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -93,6 +94,26 @@ public class RecordingApmServer extends ExternalResource {
                     if (requestBody != null) {
                         if ("/v1/metrics".equals(path)) {
                             received.addAll(OtlpMetricsParser.parse(requestBody));
+                        } else if ("/v1/traces".equals(path)) {
+                            byte[] bodyBytes = requestBody.readAllBytes();
+                            logger.debug(
+                                "RecordingApmServer received OTLP /v1/traces request ({} bytes, Content-Length [{}])",
+                                bodyBytes.length,
+                                exchange.getRequestHeaders().getFirst("Content-Length")
+                            );
+                            var parsed = OtlpTracesParser.parse(new ByteArrayInputStream(bodyBytes));
+                            logger.debug("RecordingApmServer parsed OTLP trace request into {} span(s)", parsed.size());
+                            for (ReceivedTelemetry item : parsed) {
+                                if (item instanceof ReceivedTelemetry.ReceivedSpan span) {
+                                    logger.debug(
+                                        "OTLP span: name [{}] traceId [{}] parentSpanId [{}]",
+                                        span.name(),
+                                        span.traceId(),
+                                        span.parentSpanId().orElse("(none)")
+                                    );
+                                }
+                            }
+                            received.addAll(parsed);
                         } else {
                             List<String> lines = readJsonMessages(requestBody);
                             for (String line : lines) {

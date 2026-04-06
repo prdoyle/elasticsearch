@@ -77,7 +77,9 @@ public class APM extends Plugin implements NetworkPlugin, TelemetryPlugin {
         logger.info("Sending apm metrics is {}", APMAgentSettings.TELEMETRY_METRICS_ENABLED_SETTING.get(settings) ? "enabled" : "disabled");
         logger.info("Sending apm tracing is {}", APMAgentSettings.TELEMETRY_TRACING_ENABLED_SETTING.get(settings) ? "enabled" : "disabled");
 
-        return List.of(apmTracer, apmMeter);
+        // Meter must stop before tracer so {@link APMTracer} can close shared {@link
+        // org.elasticsearch.telemetry.apm.internal.export.otelsdk.OtelSdkTelemetryResources} after metrics flush.
+        return List.of(apmMeter, apmTracer);
     }
 
     @Override
@@ -92,6 +94,11 @@ public class APM extends Plugin implements NetworkPlugin, TelemetryPlugin {
             OtelSdkSettings.TELEMETRY_OTEL_METRICS_ENDPOINT,
             OtelSdkSettings.TELEMETRY_OTEL_METRICS_INTERVAL,
             OtelSdkSettings.TELEMETRY_OTEL_METRICS_ENABLED,
+            OtelSdkSettings.TELEMETRY_OTEL_TRACES_ENDPOINT,
+            OtelSdkSettings.TELEMETRY_OTEL_TRACES_INTERVAL,
+            OtelSdkSettings.TELEMETRY_OTEL_TRACES_MAX_SPANS,
+            OtelSdkSettings.TELEMETRY_OTEL_TRACES_STACK_TRACE_LIMIT,
+            OtelSdkSettings.TELEMETRY_OTEL_TRACES_ENABLED,
             // Tracing
             APMAgentSettings.TELEMETRY_TRACING_ENABLED_SETTING,
             APMAgentSettings.TELEMETRY_TRACING_NAMES_INCLUDE_SETTING,

@@ -16,6 +16,13 @@ public interface TelemetryProvider {
 
     String OTEL_METRICS_ENABLED_SYSTEM_PROPERTY = "telemetry.otel.metrics.enabled";
 
+    /**
+     * When {@code true}, Elasticsearch uses an OpenTelemetry SDK {@code TracerProvider} with OTLP HTTP export
+     * instead of the Elastic APM Java agent for trace export. Must be set at JVM startup (same pattern as
+     * {@link #OTEL_METRICS_ENABLED_SYSTEM_PROPERTY}).
+     */
+    String OTEL_TRACES_ENABLED_SYSTEM_PROPERTY = "telemetry.otel.traces.enabled";
+
     Tracer getTracer();
 
     MeterRegistry getMeterRegistry();

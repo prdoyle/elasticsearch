@@ -18,10 +18,12 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Booleans;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.telemetry.apm.APMMeterRegistry;
 import org.elasticsearch.telemetry.apm.internal.export.MeterSupplier;
 import org.elasticsearch.telemetry.apm.internal.export.agent.AgentExportMeterSupplier;
 import org.elasticsearch.telemetry.apm.internal.export.otelsdk.OtelSdkExportMeterSupplier;
+import org.elasticsearch.telemetry.apm.internal.export.otelsdk.OtelSdkTelemetryResources;
 
 import static org.elasticsearch.telemetry.TelemetryProvider.OTEL_METRICS_ENABLED_SYSTEM_PROPERTY;
 
@@ -36,7 +38,14 @@ public class APMMeterService extends AbstractLifecycleComponent {
     protected volatile boolean enabled;
 
     public APMMeterService(Settings settings) {
-        this(settings, createOtelMeterSupplier(settings), new NoOpMeterSupplier());
+        this(settings, OtelSdkTelemetryResources.maybeCreate(settings));
+    }
+
+    public APMMeterService(Settings settings, @Nullable OtelSdkTelemetryResources sharedOtelSdk) {
+        this.enabled = APMAgentSettings.TELEMETRY_METRICS_ENABLED_SETTING.get(settings);
+        this.otelMeterSupplier = createOtelMeterSupplier(settings, sharedOtelSdk);
+        this.noopMeterSupplier = new NoOpMeterSupplier();
+        this.meterRegistry = new APMMeterRegistry(enabled ? otelMeterSupplier.get() : noopMeterSupplier.get());
     }
 
     public APMMeterService(Settings settings, MeterSupplier otelMeterSupplier, MeterSupplier noopMeterSupplier) {
@@ -46,10 +55,15 @@ public class APMMeterService extends AbstractLifecycleComponent {
         this.meterRegistry = new APMMeterRegistry(enabled ? otelMeterSupplier.get() : noopMeterSupplier.get());
     }
 
-    private static MeterSupplier createOtelMeterSupplier(Settings settings) {
+    private static MeterSupplier createOtelMeterSupplier(Settings settings, @Nullable OtelSdkTelemetryResources sharedOtelSdk) {
         boolean otelMetricsEnabled = Booleans.parseBoolean(System.getProperty(OTEL_METRICS_ENABLED_SYSTEM_PROPERTY, "false"));
         if (otelMetricsEnabled) {
-            return new OtelSdkExportMeterSupplier(settings);
+            if (sharedOtelSdk != null && sharedOtelSdk.exportsMetrics()) {
+                return new OtelSdkExportMeterSupplier(sharedOtelSdk);
+            }
+            throw new IllegalStateException(
+                OTEL_METRICS_ENABLED_SYSTEM_PROPERTY + "=true requires a shared OTel SDK resources instance that exports metrics"
+            );
         } else {
             return new AgentExportMeterSupplier(settings);
         }

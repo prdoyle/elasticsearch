@@ -33,4 +33,5 @@ dependencies {
   clusterModules project(':modules:apm')
   implementation project(':libs:logging')
   javaRestTestImplementation "io.opentelemetry.proto:opentelemetry-proto:1.7.0-alpha"
+  javaRestTestImplementation "io.opentelemetry:opentelemetry-api:1.60.1"
 }
