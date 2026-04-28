@@ -1,5 +1,7 @@
 = Elasticsearch docs
 
+DON'T MERE THIS LINE
+
 This is a guide for writing, editing, and building the following Elasticsearch
 docs:
 
